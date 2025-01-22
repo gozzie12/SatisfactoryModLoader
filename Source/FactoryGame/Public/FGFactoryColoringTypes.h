@@ -5,6 +5,7 @@
 #include "FactoryGame.h"
 #include "ItemAmount.h"
 #include "Resources/FGItemDescriptor.h"
+#include "Engine/Texture2D.h"
 #include "FGFactoryColoringTypes.generated.h"
 
 static const uint8 BUILDABLE_COLORS_MAX_SLOTS_LEGACY = 18;
@@ -89,6 +90,9 @@ public:
 	UPROPERTY( EditDefaultsOnly )
 	TSoftObjectPtr< UTexture2D > mIcon;
 
+protected:
+	FORCEINLINE virtual bool Internal_CanItemBePickedup() const override { return false; }
+
 };
 
 // Swatch Class
@@ -103,17 +107,6 @@ UCLASS( Blueprintable, BlueprintType )
 class FACTORYGAME_API UFGFactoryCustomizationDescriptor_Pattern : public UFGFactoryCustomizationDescriptor
 {
 	GENERATED_BODY()
-
-public:
-	FItemAmount GetRefundCostOnApplication() const { return mRefundCostOnApplication; }
-
-protected:
-	/** 
-	* This is a very specific property for only the Pattern Removal so that we can refund a cost when used. This was preferable to having to store the 
-	* recipes used for every pattern since that's a lot of extra data and all patterns should TM cost the same to apply.
-	*/
-	UPROPERTY( EditDefaultsOnly, Category="Pattern Removal" )
-	FItemAmount mRefundCostOnApplication;
 };
 
 // Material Class
@@ -151,6 +144,28 @@ public:
 #endif
 };
 
+/* Simple class containing default values for paint finish overrides.*/
+UCLASS( Blueprintable, BlueprintType )
+class FACTORYGAME_API UFGFactoryCustomizationDescriptor_PaintFinish : public UFGFactoryCustomizationDescriptor_Swatch
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION(BlueprintCallable)
+	static void GetPaintFinishSettings(TSubclassOf<UFGFactoryCustomizationDescriptor_PaintFinish> Class, float& Roughness, float& Metallic, bool& HasForcedColor, FLinearColor& ForcedColor);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Paint Finish")
+	float RoughnessValue;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Paint Finish")
+	float MetallicValue;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Paint Finish")
+	FLinearColor mForcedColor;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Paint Finish")
+	bool mHasForcedColor = false;
+};
 
 //////////////////////////////////////////////////////////////////////////
 /// Begin Skin Types
@@ -241,10 +256,7 @@ public:
 
 /// End Skin Types
 //////////////////////////////////////////////////////////////////////////
-
-
-
-
+///
 
 UCLASS( Blueprintable, BlueprintType )
 class FACTORYGAME_API UFGFactoryCustomizationCollection : public UObject
@@ -295,12 +307,12 @@ public:
 
 	FFactoryCustomizationColorSlot( FLinearColor primary, FLinearColor secondary ) : 
 		PrimaryColor( primary ), 
-		SecondaryColor( secondary ) 
+		SecondaryColor( secondary )
 	{}
 
 	FORCEINLINE bool operator==( const FFactoryCustomizationColorSlot& other ) const 
 	{
-		return this->PrimaryColor == other.PrimaryColor && this->SecondaryColor == other.SecondaryColor && this->Metallic == other.Metallic && this->Roughness == other.Roughness;
+		return this->PrimaryColor == other.PrimaryColor && this->SecondaryColor == other.SecondaryColor && this->PaintFinish == other.PaintFinish;
 	}
 
 	FORCEINLINE bool operator!=( const FFactoryCustomizationColorSlot& other ) const 
@@ -313,7 +325,6 @@ public:
 		bOutSuccess = true;
 		if( Ar.IsSaving() )
 		{
-			// Write color data minus the alpha as that is guarenteed to be 1.f
 			Ar << PrimaryColor.R;
 			Ar << PrimaryColor.G;
 			Ar << PrimaryColor.B;
@@ -322,9 +333,8 @@ public:
 			Ar << SecondaryColor.G;
 			Ar << SecondaryColor.B;
 
-			// @todoCustomization - Compress these if we're going to use them (preferably before BU5)
-			Ar << Metallic;
-			Ar << Roughness;
+			
+			Ar << PaintFinish;
 		}
 		else
 		{
@@ -337,26 +347,22 @@ public:
 			Ar << SecondaryColor.G;
 			Ar << SecondaryColor.B;
 			SecondaryColor.A = 1.f;
-
-			// @todoCustomization - Uncompress these if we're going to use them (preferably before BU5)
-			Ar << Metallic;
-			Ar << Roughness;
+			
+			
+			Ar << PaintFinish;
 		}
 
 		return bOutSuccess;
 	}
 
-	UPROPERTY( SaveGame, EditAnywhere, NotReplicated )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, NotReplicated, Category = "Customization" )
 	FLinearColor PrimaryColor;
 
-	UPROPERTY( SaveGame, EditAnywhere, NotReplicated )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, NotReplicated, Category = "Customization" )
 	FLinearColor SecondaryColor;
 
-	UPROPERTY( SaveGame, EditAnywhere, NotReplicated )
-	float Metallic;
-
-	UPROPERTY( SaveGame, EditAnywhere, NotReplicated )
-	float Roughness;
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, NotReplicated, Category = "Customization" )
+	TSubclassOf<UFGFactoryCustomizationDescriptor_PaintFinish> PaintFinish;
 };
 
 template<>
@@ -377,14 +383,23 @@ struct FACTORYGAME_API FFactoryCustomizationData
 
 	FFactoryCustomizationData() :
 		SwatchDesc( nullptr ),
+	
 		PatternDesc( nullptr ),
-		MaterialDesc( nullptr )
+	
+		MaterialDesc( nullptr ),
+	
+		SkinDesc( nullptr ),
+	
+		PatternRotation( 0.f ),
+		ColorSlot( INDEX_NONE ),
+		NeedsSkinUpdate( false ),
+		HasPower( false )
 	{}
 
 	/**
 	 * Call from buildable after fully "setup". This shouldn't be done on creation, but only once we know the data is complete. Ie. from the buildable not say, the BuildGun
 	 */
-	void Initialize( class AFGGameState* gameState );
+	void Initialize( class AFGGameState* gameState, int32 forceDataSize = INDEX_NONE );
 	
 	/**
 	 * Combine the data from this CustomizationData with another. This will correctly apply data so that nullptrs don't override existing data
@@ -403,13 +418,24 @@ struct FACTORYGAME_API FFactoryCustomizationData
 	void UpdateHasPowerData();
 
 	/**
-	 * Fills an array with all valid customizations ( useful when sampling buildings tex. )
+	 * Returns all the recipes applied to this customization data.
 	 */
-	void GetCustomizationArray( TArray< TSubclassOf < class UFGFactoryCustomizationDescriptor > >& out_customizations );
+	void GetAppliedRecipes( class UWorld* worldContext, TArray< TSubclassOf< class UFGRecipe > >& out_recipes ) const;
+
+	/**
+	 * Returns the refunds for the specified customization data. If newCustomizationData isn't supplied, then all refunds will be returned. Otherwise only the refunds for the customization that has changed will be returned.
+	 */
+	static TArray< struct FInventoryStack > GetCustomizationRefunds( class UWorld* worldContext, const FFactoryCustomizationData& baseCustomizationData, const FFactoryCustomizationData* newCustomizationData = nullptr );
 
 	FORCEINLINE bool operator==( const FFactoryCustomizationData& other ) const
 	{
-		return this->SwatchDesc == other.SwatchDesc && this->PatternDesc == other.PatternDesc && this->MaterialDesc == other.MaterialDesc;
+		return this->SwatchDesc == other.SwatchDesc
+		&& this->PatternDesc == other.PatternDesc
+		&& this->MaterialDesc == other.MaterialDesc
+		&& this->SkinDesc == other.SkinDesc
+		&& this->OverrideColorData == other.OverrideColorData
+		&& this->PatternRotation == other.PatternRotation
+		;
 	}
 
 	FORCEINLINE bool operator!=( const FFactoryCustomizationData& other ) const
@@ -417,22 +443,22 @@ struct FACTORYGAME_API FFactoryCustomizationData
 		return !( *this == other );
 	}
 
-	UPROPERTY( SaveGame, EditAnywhere, Category = "Customization" )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, Category = "Customization" )
 	TSubclassOf< class UFGFactoryCustomizationDescriptor_Swatch > SwatchDesc;
 	
-	UPROPERTY( SaveGame, EditAnywhere, Category = "Customization" )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, Category = "Customization" )
 	TSubclassOf< class UFGFactoryCustomizationDescriptor_Pattern > PatternDesc;
 
-	UPROPERTY( SaveGame, EditAnywhere, Category = "Customization" )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, Category = "Customization" )
 	TSubclassOf< class UFGFactoryCustomizationDescriptor_Material > MaterialDesc;
 
-	UPROPERTY( SaveGame, EditAnywhere, Category = "Customization" )
+	UPROPERTY( SaveGame, EditAnywhere, BlueprintReadWrite, Category = "Customization" )
 	TSubclassOf< class UFGFactoryCustomizationDescriptor_Skin > SkinDesc;
 	
-	UPROPERTY( SaveGame )
+	UPROPERTY( SaveGame, BlueprintReadWrite, Category = "Customization" )
 	FFactoryCustomizationColorSlot OverrideColorData;
 
-	UPROPERTY( SaveGame )
+	UPROPERTY( SaveGame, BlueprintReadWrite, Category = "Customization" )
 	uint8 PatternRotation;
 
 	/**
@@ -465,4 +491,3 @@ struct FACTORYGAME_API FFactoryCustomizationData
 	UPROPERTY( NotReplicated )
 	uint8 HasPower;
 };
-

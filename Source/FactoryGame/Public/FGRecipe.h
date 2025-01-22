@@ -7,6 +7,30 @@
 #include "FGEventSubsystem.h"
 #include "FGRecipe.generated.h"
 
+// A simple struct to expose a recipe amount pair to blueprints
+USTRUCT( BlueprintType )
+struct FRecipeAmountPair
+{
+	GENERATED_BODY()
+
+	/** Recipe to give player */
+	UPROPERTY( EditDefaultsOnly, Category = "Recipe" )
+	TSoftClassPtr< class UFGRecipe > Recipe;
+
+	/** How many of given recipe */
+	UPROPERTY( EditDefaultsOnly, Category = "Recipe" )
+	int32 Amount;
+};
+
+// Exposes FRecipeAmount as an array
+USTRUCT( BlueprintType )
+struct FRecipeAmounts
+{
+	GENERATED_BODY()
+
+	UPROPERTY( EditDefaultsOnly, Category = "Recipe" )
+	TArray<FRecipeAmountPair> RecipeAmountPairs;
+};
 
 /**
  * This is a class describing a recipe, subclass this in blueprint to make a new recipe.
@@ -33,9 +57,9 @@ public:
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Recipe" )
 	static TArray< FItemAmount > GetIngredients( TSubclassOf< UFGRecipe > inClass );
 
-	/** Get the products for this recipe. @todo remove unused allowChildRecipes. */
+	/** Get the products for this recipe. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Recipe" )
-	static TArray< FItemAmount > GetProducts( TSubclassOf< UFGRecipe > inClass, bool allowChildRecipes = false );
+	static TArray< FItemAmount > GetProducts( TSubclassOf< UFGRecipe > inClass );
 
 	/** Returns this recipe item category. Either overridden or fetched from the produced item */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Recipe" )

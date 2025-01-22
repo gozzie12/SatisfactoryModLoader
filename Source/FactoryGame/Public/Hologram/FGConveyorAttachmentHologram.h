@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Hologram/FGFactoryHologram.h"
+#include "FGFactoryHologram.h"
 #include "FGConveyorAttachmentHologram.generated.h"
 
 /**
@@ -19,14 +19,19 @@ public:
 
 	// Begin AActor Interface
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	// End AActor Interface
 
 	// Begin AFGHologram Interface
+	virtual void PreHologramPlacement( const FHitResult& hitResult ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
+	virtual bool TryUpgrade( const FHitResult& hitResult ) override;
+	virtual AActor* GetUpgradedActor() const override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual float GetHologramHoverHeight() const override;
 	virtual void GetIgnoredClearanceActors( TArray< AActor* >& ignoredActors ) const override;
+	virtual bool CanNudgeHologram() const override;
 	// End AFGHologram Interface
 
 	// Begin AFGBuildableHologram Interface
@@ -63,16 +68,23 @@ private:
 	float mMaxValidTurnAngle;
 
 	/** The conveyor we snapped to. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	class AFGBuildableConveyorBelt* mSnappedConveyor;
 
+	UPROPERTY( Replicated, CustomSerialization )
+	class AFGBuildableConveyorAttachment* mUpgradedConveyorAttachment;
+
 	/** The connection we snapped to. */
-	UPROPERTY()
-	class UFGFactoryConnectionComponent* mSnappedConection = nullptr;
+	UPROPERTY( CustomSerialization )
+	class UFGFactoryConnectionComponent* mSnappedConnection = nullptr;
 
 	TArray<class UFGFactoryConnectionComponent* > mConnections;
+
+	/** The connection we are snapped by */
+	UPROPERTY( Replicated, CustomSerialization )
 	int8 mSnappingConnectionIndex = -1;
 
 	/** The offset we snapped on the conveyor. */
+	UPROPERTY( Replicated, CustomSerialization )
 	float mSnappedConveyorOffset;
 };

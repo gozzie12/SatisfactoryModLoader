@@ -5,14 +5,16 @@
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
 #include "FGSubsystem.h"
-#include "FGTutorialSubsystem.h"
-#include "Resources/FGResourceDescriptor.h"
 #include "FGRecipe.h"
+#include "GameplayTagContainer.h"
 #include "FGTutorialIntroManager.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FIntroSequenceStateUpdate );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FCurrentIntroStepUpdate );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnTutorialCompleted );
+DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnIntroSkipped );
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnOnboardingStepUpdated, class UFGOnboardingStep*, newOnboardingStep );
 
 //Steps in the intro tutorial
 UENUM( BlueprintType )
@@ -31,42 +33,8 @@ enum class EIntroTutorialSteps : uint8
 	ITS_HUB_LVL3		UMETA( DisplayName = "Upgrade Hub to lvl 3" ),
 	ITS_HUB_LVL4		UMETA( DisplayName = "Upgrade Hub to lvl 4" ),
 	ITS_HUB_LVL5		UMETA( DisplayName = "Upgrade Hub to lvl 5" ),
-	ITS_DONE			UMETA( DisplayName = "Done with intro" )
-};
-
-USTRUCT( BlueprintType )
-struct FRecipeAmountPair
-{
-	GENERATED_BODY()
-
-	/** Recipe to give player */
-	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
-	TSubclassOf< class UFGRecipe > Recipe;
-
-	/** How many of given recipe */
-	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
-	int32 Amount;
-};
-
-USTRUCT( BlueprintType )
-struct FTutorialHintData
-{
-	GENERATED_BODY()
-
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial" )
-	EIntroTutorialSteps ID;
-
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial" )
-	FText Title;
-
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial" )
-	TArray< FText > HintTexts;
-
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial" )
-	TSubclassOf< class UFGMessageBase > Message;
-
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial" )
-	TMap< TSubclassOf< class UFGMessageBase >, float > AdditionalMessages;
+	ITS_DONE			UMETA( DisplayName = "Done with intro" ),
+	ITS_DEPRECATED		UMETA( DisplayName = "Deprecated" )
 };
 
 UCLASS( abstract )
@@ -81,12 +49,14 @@ public:
 	UFUNCTION( BlueprintPure, Category = "TutorialIntroManager", DisplayName = "GetTutorialIntroManager", Meta = ( DefaultToSelf = "worldContext" ) )
 	static AFGTutorialIntroManager* Get( UObject* worldContext );
 
+	static const int32 MaxTradingPostLevel;
 public:	
 	AFGTutorialIntroManager();
 
 	// Begin AActor interface
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 	virtual void Tick( float DeltaTime ) override;
+	virtual void PostInitializeComponents() override;
 	// End AActor interface
 
 	// Begin IFGSaveInterface
@@ -115,6 +85,16 @@ public:
 	/** Gets the current step we are at */
 	UFUNCTION( BlueprintPure, Category = "Tutorial" )
 	FORCEINLINE EIntroTutorialSteps GetCurrentTutorialStep() const { return mCurrentLocalTutorial; }
+	FORCEINLINE EIntroTutorialSteps GetPendingTutorialStep() const { return mPendingTutorial; }
+
+	/** Finishes the given onboarding step if that is the current step. Otherwise nothing happens. */
+	UFUNCTION( BlueprintCallable, Category = "Tutorial" )
+	void CompleteOnboardingStep( class UFGOnboardingStep* completedOnboardingStep );
+	void CompleteOnboardingStepByTag( FGameplayTag completedOnboardingStepTag );
+	
+	UFUNCTION( BlueprintPure, Category = "Tutorial" )
+	FORCEINLINE class UFGOnboardingStep* GetCurrentOnboardingStep() const { return mCurrentOnboardingStep; }
+	class UFGOnboardingStep* GetOnboardingStepFromTag( FGameplayTag OnboardingStepTag ) const;
 
 	/** Sets the tradingpost level to new value */
 	void SetTradingPostLevel( int32 newLevel );
@@ -163,16 +143,15 @@ public:
 	UFUNCTION( BlueprintPure, Category = "Tutorial" )
 	FORCEINLINE bool GetCanSkipTutorial() const { return mCanIntroBeSkipped; }
 
-	/** Gives resoures to player that they need to build things they should have built playing the tutorial */
-	void GiveTutorialResources( class AFGCharacterPlayer* inPlayer );
-
 	/** Checks if a tradingpost has ever been built */
 	UFUNCTION(BlueprintPure, Category = "Tutorial")
 		FORCEINLINE bool HasTradingpostBeenBuilt() const { return mTradingPostBuilt; }
-
-
+	
 	UFUNCTION( BlueprintCallable, Category = "Tutorial" )
 	void OnCodexOpened();
+
+	// Skips the tutorial/onboarding. Finishes all tutorial steps. 
+	void SkipOnboarding();
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -184,34 +163,37 @@ protected:
 	/** Called when a schematic is unlocked */
 	UFUNCTION()
 	void OnSchematicPurchased( TSubclassOf< UFGSchematic > newSchematic );
+	
+	/** Called when an item is picked up in the world, This only triggers for items placed by us and not player dropped items */
+	UFUNCTION()
+	void OnItemPickuped( AFGPlayerState* playerState, const FItemAmount& totalAmountPickuped );
 
 	/** Updates progress in the tutorial to next step specified */
 	UFUNCTION( BlueprintCallable, Category = "Tutorial" )
 	void UpdateTutorial( EIntroTutorialSteps nextTutorialStep );
-
-	/** Checks if it is time to push out the pending tutorial step */
-	void HandlePendingTutorials();
-
-	/** Clears the currently displayed hint widget in hud for when a tutorial step is completed */
-	void ClearActiveTutorialHint();
-
-	/** Called when a player gets an item in its inventory */
-	UFUNCTION()
-	void OnPlayerAddedItemToInventory( TSubclassOf< class UFGItemDescriptor > itemClass, int32 numAdded );
-
+	
+	void SetCurrentOnboardingStep( UFGOnboardingStep* inOnboardingStep );
+	void SetCurrentOnboardingStep( FGameplayTag inOnboardingStep );
+	
 	/** Called when a player gets an item in its arm slot */
 	UFUNCTION()
-	void OnPlayerAddedItemToArmSlot( TSubclassOf< class UFGItemDescriptor > itemClass, int32 numAdded );
+	void OnPlayerAddedItemToArmSlot( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numAdded, UFGInventoryComponent* targetInventory = nullptr );
+
+	UFUNCTION()
+	void OnMessageFinishedPlayingForPlayer( class AFGPlayerController* player, class UFGMessage* message );
 
 	/** Sets the status of mTradingPostBuilt */
 	void SetTradingpostBuilt( bool hasbuilt );
-
-
+	
 	/** Called from IntroDone and only once per session */
 	void OnIntroDone();
 
 	UFUNCTION()
 	void OnRep_TradingPostLevel();
+	UFUNCTION()
+	void OnRep_HasCompletedIntroTutorial();
+	UFUNCTION()
+	void OnRep_CurrentOnboardingStep();
 
 private:
 	/** Returns true if we should skip the onboarding/tutorial */
@@ -230,6 +212,14 @@ public:
 	UPROPERTY(BlueprintAssignable,Category="Tutorial")
 	FOnTutorialCompleted mOnTutorialCompleted;
 
+	/** Called when the intro is skipped. Only triggered on server for now. */
+	UPROPERTY(BlueprintAssignable,Category="Intro")
+	FOnIntroSkipped OnIntroSkipped;
+
+	/* previousOnboardingStep is valid when a transition from one step to another happens. Invalid if we load a game or init the first onboarding step */
+	UPROPERTY(BlueprintAssignable,Category="Tutorial")
+	FOnOnboardingStepUpdated mOnOnboardingStepUpdated;
+
 protected:
 	/** Has a trading post been built */
 	UPROPERTY( SaveGame )
@@ -242,20 +232,27 @@ protected:
 	bool mCanIntroBeSkipped;
 
 private:	
-	/** Array of pending tutorial IDs that should be shown when possible ( no other widgets on screen etc ) */
-	UPROPERTY( Replicated, SaveGame )
-	EIntroTutorialSteps mPendingTutorial;
+	/** This is the tutorial that we are currently working towards. Deprecated but saved for save compatibility */
+	UPROPERTY( SaveGame )
+	EIntroTutorialSteps mPendingTutorial = EIntroTutorialSteps::ITS_DEPRECATED;
+
+	UPROPERTY( ReplicatedUsing=OnRep_CurrentOnboardingStep, SaveGame )
+	class UFGOnboardingStep* mCurrentOnboardingStep;
 
 	/** Array of pending tutorial IDs that should be shown when possible ( no other widgets on screen etc ) */
 	EIntroTutorialSteps mCurrentLocalTutorial;
 
 	/** Indicates if the player has completed the introduction tutorial */
-	UPROPERTY( Replicated, EditDefaultsOnly, SaveGame, Category = "Tutorial" )
+	UPROPERTY( ReplicatedUsing=OnRep_HasCompletedIntroTutorial, EditDefaultsOnly, SaveGame, Category = "Tutorial" )
 	bool mHasCompletedIntroTutorial;
 
 	/** Indicates that the introduction sequence is done (right now, drop pod sequence) */
 	UPROPERTY( Replicated, SaveGame )
 	bool mHasCompletedIntroSequence;
+
+	/** Class of the message that plays when landing. */
+	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
+	class UFGMessage* mLandingOnboardingMessage;
 
 	/** The class of the trading post */
 	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
@@ -265,20 +262,9 @@ private:
 	UPROPERTY( SaveGame, Replicated )
 	class AFGBuildableTradingPost* mTradingPost;
 
-	/** Data used for the intro tutorial */
-	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
-	TArray< FTutorialHintData > mIntroTutorialData;
-
 	/** Class of Iron Resource Descriptor */
 	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
 	TSubclassOf< class UFGItemDescriptor > mIronOreDescriptor;
-
-	UPROPERTY( SaveGame )
-	bool mDidPickUpIronOre;
-
-	/** An item you receive when dismantling the drop pod so we can identify it */
-	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
-	TSubclassOf< class UFGItemDescriptor > mDropPodItemClass;
 	
 	/** Checks if we have dismantled the drop pod */
 	UPROPERTY( SaveGame )
@@ -372,12 +358,13 @@ private:
 
 	uint8 mStartupFrameCounter = 0; //[DavalliusA:Wed/03-04-2019] a way to stop initilization of the start value to trigger effect from changes
 
-	/** List of recipes that player should get the items of if the player chooses to skip the tutorial */
-	UPROPERTY( EditDefaultsOnly, Category = "Tutorial" )
-	TArray< FRecipeAmountPair > mRecipesToGivePlayersSkippingTutorial;
-
 	/** Bool for when codex has been opened */
 	UPROPERTY( SaveGame )
 	bool mDidOpenCodex;
-	
+
+	/** The different onboarding steps we have in the game. Gathered early in the lifetime of the tutorial intro manager */
+	UPROPERTY( Transient )
+	TArray<class UFGOnboardingStep*> mCachedOnboardingSteps;
+
+	bool mIsPlayingIntroSequence;
 };

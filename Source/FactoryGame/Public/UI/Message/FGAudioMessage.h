@@ -4,7 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "UI/Message/FGMessageBase.h"
+#include "AkGameplayTypes.h"
+#include "FGMessageBase.h"
 #include "FGAudioMessage.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnAudioMessageFinishedPlaying );
@@ -39,6 +40,12 @@ struct FAudioSubtitlePair
 	/** Sender for this part of message */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
 	TSubclassOf< class UFGMessageSender > SenderClass;
+
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
+	int32 SubtitleIndex = 0;
+
+	UPROPERTY( BlueprintReadOnly, Category = "Audio Message" )
+	TSubclassOf< class UFGPresentationSlideWidget > PresentationSlideWidget = nullptr;
 };
 
 USTRUCT( BlueprintType )
@@ -46,32 +53,40 @@ struct FMessageSubtitle
 {
 	GENERATED_BODY()
 
-	FMessageSubtitle() :
-		Subtitle( FText() ),
-		SenderClass( nullptr ),
-		TimeStamp( 0.0f )
-	{}
+	FMessageSubtitle(){}
 	
 	
 	FMessageSubtitle( FText subtitle, TSubclassOf< class UFGMessageSender > senderClass ) :
 		Subtitle( subtitle ),
+		SenderClass( senderClass )
+	{}
+
+	FMessageSubtitle( FText subtitle, TSubclassOf< class UFGMessageSender > senderClass, float timeStamp, TSubclassOf< class UFGPresentationSlideWidget > presentationSlideWidget ) :
+		Subtitle( subtitle ),
 		SenderClass( senderClass ),
-		TimeStamp( 0.0f )
+		TimeStamp( timeStamp ),
+		PresentationSlideWidget( presentationSlideWidget )
 	{}
 
 	/** Subtitle to display */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
-	FText Subtitle;
+	FText Subtitle = FText();
 
 	/** Sender for this subtitle */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
-	TSubclassOf< class UFGMessageSender > SenderClass;
+	TSubclassOf< class UFGMessageSender > SenderClass = nullptr;
 
 	/** When in the audio event should we show this subtitle */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
-	float TimeStamp;
+	float TimeStamp = 0.f;
 
-	float TimeOnScreen;
+	/** The presentation slide widget for this subtitle */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
+	TSubclassOf< class UFGPresentationSlideWidget > PresentationSlideWidget = nullptr;
+
+	float TimeOnScreen = 0.f;
+	
+	int32 SubtitleIndex = 0;
 };
 
 USTRUCT( BlueprintType )
@@ -95,7 +110,7 @@ struct FMessageDialogue
 	UPROPERTY( EditDefaultsOnly, Category = "Audio Message" )
 	class UAkAudioEvent* AudioEvent;
 
-	UPROPERTY( EditDefaultsOnly, Category = "Audio Message" )
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
 	TArray< FMessageSubtitle > MessageSubtitles;
 
 	/** How much should we overlap this dialogue with the next one. Useful when you want to overlap two conversations like one person interrupting another. 0 (default) means it will just play as usual */
@@ -103,94 +118,33 @@ struct FMessageDialogue
 	float OverlapWithNextDialogue;
 
 	bool HasMoreSubtitlesToShow() const;
-
-	FMessageSubtitle PopNextSubtitle( float subtitleTimeMultiplier );
-};
-
-USTRUCT( BlueprintType )
-struct FPendingMessage
-{
-	GENERATED_BODY()
-
-	FPendingMessage() : 
-        Message( nullptr ),
-        MessagePriorityType( EMessagePriorityType::MPT_DirectMessage ),
-        Delay( 0.0f )
-	{}
-
-	FPendingMessage( TSubclassOf< class UFGMessageBase > message, EMessagePriorityType messagePriorityType, float delay ) : 
-        Message( message ),
-        MessagePriorityType( messagePriorityType ),
-        Delay( delay )
-	{}
-
-	FPendingMessage( TSubclassOf< class UFGMessageBase > message, EMessagePriorityType messagePriorityType ) : 
-    Message( message ),
-    MessagePriorityType( messagePriorityType )
-	{}
-
-	UPROPERTY( BlueprintReadOnly, Category = "Message" )
-	TSubclassOf< class UFGMessageBase > Message;
-
-	/** What priority type is this message. Only applicable for audio messages */
-	UPROPERTY(  BlueprintReadOnly, Category = "Message" )
-	EMessagePriorityType MessagePriorityType;
 	
-	/** The delay between this message and the previous pending message. Only applicable for messages in the same queue */
-	UPROPERTY( BlueprintReadOnly, Category = "Message" )
-	float Delay;
+	/** Return length of this dialogue in seconds */
+	float GetLength() const;
+
+	FMessageSubtitle PopNextSubtitle();
 };
-
-USTRUCT( BlueprintType )
-struct FPendingMessageQueue
-{
-	GENERATED_BODY()
-
-	FPendingMessageQueue( FPendingMessage pendingMessage ) :
-		PendingMessages( {pendingMessage} )
-	{}
-
-	FPendingMessageQueue( TArray<FPendingMessage> pendingMessages ) :
-		PendingMessages( pendingMessages )
-	{}
-
-	FPendingMessageQueue(  TSubclassOf< class UFGMessageBase > message ) :
-		PendingMessages( {FPendingMessage( message, EMessagePriorityType::MPT_DirectMessage )} )
-	{}
-
-	FPendingMessageQueue(){}
-
-	UPROPERTY( BlueprintReadOnly, Category = "Audio Message" )
-	TArray< FPendingMessage > PendingMessages;
-
-	bool HasUnplayedMessages();
-
-	bool ContainsAudioMessages();
-
-	FPendingMessage PopPendingMessage();
-
-};
-
 
 /**
- * 
+ * This class is used to display a UFGMessage on screen. The widget is populated with data from the message asset.
+ * It could benefit from some cleanup.
  */
 UCLASS( BlueprintType, Blueprintable )
 class FACTORYGAME_API UFGAudioMessage : public UFGMessageBase
 {
 	GENERATED_BODY()
-public: 
+public:
 	/** ctor */
 	UFGAudioMessage( const FObjectInitializer& ObjectInitializer );
-
-	// Begin UObject interface
-	virtual void PostLoad() override;
-	// End UObject interface
 
 	// Begin Userwidget interface
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	// End Userwidget interface
+
+	// Begin UFGMessageBase interface
+	virtual int32 GetMessagePriority() const override;
+	// End UFGMessageBase interface
 	
 	/** Starts playing the first dialogue */
 	UFUNCTION( BlueprintCallable, Category = "Audio Message" )
@@ -201,13 +155,18 @@ public:
 	UFUNCTION()
 	void OnSkipButtonReleased();
 	
-	/** Does the setup for playing next part in the dialogue */
+	/** Does the setup for playing next part in the dialogue
+	 * @param skipToNextTimeStamp if true we jump in the audio file to the next subtitles timestamp.
+	 */
 	UFUNCTION( BlueprintNativeEvent, Category = "AudioMessage" )
-	void PlayNextDialogue();
+	void PlayNextDialogue( bool skipToNextTimeStamp = false );
 
 	/** Continues playing next dialoge in the mDialogue array  */
 	UFUNCTION()
 	void ContinuePlayback();
+	
+	UFUNCTION( BlueprintCallable, Category = "Message|Tools" )
+	void SkipToNextSubtitle();
 
 	/** Removes all unplayed dialogues and stops the current one.  */
 	UFUNCTION( BlueprintCallable, Category = "Audio Message" )
@@ -238,29 +197,57 @@ public:
 
 	UFUNCTION( BlueprintPure, Category = "Audio Message" )
 	static EMessagePriorityType GetMessagePriorityType( TSubclassOf< UFGAudioMessage > message, UObject* worldContext );
+
+	void InitMessage( class UFGMessage* message );
+	/** Returns the associated message asset for this message  */
+	UFUNCTION( BlueprintPure, Category = "Message" )
+	class UFGMessage* GetMessage() const { return mMessage; }
+
+#if WITH_EDITOR
+	UFUNCTION( BlueprintPure, Category = "Message" )
+	float GetCurrentAudioPlayProgress();
+	UFUNCTION( BlueprintCallable, Category = "Message|Tools" )
+	void PauseMessage();
+	UFUNCTION( BlueprintPure, Category = "Message|Tools" )
+	bool IsMessagePaused();
+	UFUNCTION( BlueprintCallable, Category = "Message|Tools" )
+	void ResumeMessage();
+	UFUNCTION( BlueprintCallable, Category = "Message|Tools" )
+	void StopAndDestroyMessage();
+	/** Used if we want to start playing a message from somewhere other that the first subtitle. Only used by tools */
+	int32 Tool_StartOnSubtitleIndex = 0;
+	float Tool_CurrentAudioPlayProgress = 0.f;
+	bool Tool_SkipIncomingAnimation = false;
+#endif
+
+protected:
+	/** Do we want to skip the dot animation in the incoming message */
+	UFUNCTION( BlueprintPure, Category = "Audio Message" )
+	bool SkipIncomingAnimation();
+
+	/** Does any subtitle in this message contain a presentation slide */
+	UFUNCTION( BlueprintPure, Category = "Audio Message" )
+	bool DoesMessageContainPresentation() const;
+	
 private:
 	/** Used to discard any input we want to consume but not use */
 	FORCEINLINE UFUNCTION()
 	void DiscardInput() { ; }
-
-#if WITH_EDITOR
-	/** This migrates the old audio events structs to the new message dialogue structs */
-	void MigrateDialogueData();
-#endif
-
+	
+	void SetupAkAudioComponent();
+	void TrySkipToSubtitle();
+	
 public:
 	/** The Ak component */
 	UPROPERTY()
 	class UAkComponent* mAkAudioComponent;
 
-	/** The AK audio to play when "showing" this message */
-	UPROPERTY( VisibleDefaultsOnly, BlueprintReadOnly, Category = "Audio Message - DEPRECATED" )
-	TArray< FAudioSubtitlePair > mAudioEvents;
+	AkPlayingID mAkPlayingId = AK_INVALID_PLAYING_ID;
 
 	/** The Dialogue, Audio and subtitles, to play/show when "showing" this message */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Audio Message" )
 	TArray< FMessageDialogue > mDialogueData;
-
+	
 	/** Timer handle for subtitles */
 	FTimerHandle mSubtitleTimerHandle;
 
@@ -293,8 +280,19 @@ public:
 	UPROPERTY( BlueprintAssignable )
 	FOnAudioMessageFinishedPlaying mOnAudioMessageFinishedPlayback;
 	
+protected:
+	/** Mapping context which is applied when opening this audio message */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category="Input" )
+	TObjectPtr< class UInputMappingContext > mMappingContext;
+	
 private:
 
-	UPROPERTY()
+	UPROPERTY( Transient )
 	class UInputComponent* mAudioMessageInputComponent;
+
+	/** This is the message data for this audio message. This is not always valid. Old message system used derived audio message classes
+	 *	and some of them is still around. In those cases the data is specified directly in the UFGAudioMessage class  */  
+	UPROPERTY( Transient )
+	class UFGMessage* mMessage;
+	
 };

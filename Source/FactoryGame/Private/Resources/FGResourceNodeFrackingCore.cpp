@@ -3,13 +3,13 @@
 #include "Resources/FGResourceNodeFrackingCore.h"
 
 AFGResourceNodeFrackingCore::AFGResourceNodeFrackingCore() : Super() {
-	this->bAlwaysRelevant = false;
-	this->NetCullDistanceSquared = 360000000000.0;
+
 }
-void AFGResourceNodeFrackingCore::BeginPlay(){ }
-void AFGResourceNodeFrackingCore::EndPlay(const EEndPlayReason::Type endPlayReason){ }
+void AFGResourceNodeFrackingCore::BeginPlay(){ Super::BeginPlay(); }
+void AFGResourceNodeFrackingCore::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 void AFGResourceNodeFrackingCore::RegisterSatellite(TWeakObjectPtr<  AFGResourceNodeFrackingSatellite > satellite){ }
 void AFGResourceNodeFrackingCore::Factory_SetSatellitesActive(bool isActive){ }
 void AFGResourceNodeFrackingCore::GetSatellites(TArray<  AFGResourceNodeFrackingSatellite* >& out_Satellites) const{ }
 int32 AFGResourceNodeFrackingCore::GetNumOccupiedSatellites(int32& numSatellites) const{ return int32(); }
 bool AFGResourceNodeFrackingCore::IsAllSatellitesOccupied() const{ return bool(); }
+void AFGResourceNodeFrackingCore::OnSatelliteIsOccupiedChanged(const AFGResourceNodeFrackingSatellite* satellite){ }

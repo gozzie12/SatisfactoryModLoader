@@ -3,15 +3,15 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "CoreMinimal.h"
-#include "FGSaveInterface.h"
-#include "GameFramework/Info.h"
-#include "Resources/FGTapeData.h"
 #include "AkGameplayTypes.h"
+#include "Components/BoxComponent.h"
+#include "CoreMinimal.h"
 #include "FGBoomboxListenerInterface.h"
 #include "FGCharacterPlayer.h"
 #include "FGRemoteCallObject.h"
-#include "Components/BoxComponent.h"
+#include "FGSaveInterface.h"
+#include "GameFramework/Info.h"
+#include "Resources/FGTapeData.h"
 #include "FGBoomBoxPlayer.generated.h"
 
 UENUM( BlueprintType )
@@ -44,8 +44,35 @@ struct FBoomBoxPlayerState
 	UPROPERTY( SaveGame )
 	float mVolume = 1.f;
 
-	UPROPERTY( SaveGame, meta = (Bitmask, BitmaskEnum = EBoomBoxPlaybackStateBitfield) )
+	UPROPERTY( SaveGame, meta = (Bitmask, BitmaskEnum = "/Script/FactoryGame.EBoomBoxPlaybackStateBitfield") )
 	int32 mPlaybackState = 0;
+};
+
+/** Item state for the boombox. Shared by the equipment and the actor itself. */
+USTRUCT( BlueprintType )
+struct FACTORYGAME_API FFGBoomBoxItemState
+{
+	GENERATED_BODY()
+
+	/** The tape currently loaded into the boombox */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "BoomBox" )
+	TSubclassOf<UFGTapeData> CurrentTape;
+
+	/** Index of the current song on the tape */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "BoomBox" )
+	int32 CurrentSongIndex = -1;
+
+	/** Current offset of the song in the milliseconds */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "BoomBox" )
+	int32 SongOffsetMS = 0;
+
+	/** Volume of the boombox */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "BoomBox" )
+	float Volume = 1.0f;
+
+	/** The currently selected repeat mode on the boombox */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "BoomBox" )
+	EBoomBoxRepeatMode RepeatMode = EBoomBoxRepeatMode::RepeatTape;
 };
 
 UCLASS()
@@ -138,7 +165,11 @@ public:
 	virtual bool NeedTransform_Implementation() override;
 	virtual bool ShouldSave_Implementation() const override;
 	// End IFSaveInterface
-
+	
+	void LoadFromItemState( const FFGDynamicStruct& itemState );
+	FFGDynamicStruct SaveToItemState() const;
+	void FlushItemState() const;
+	
 	/** Changes the active tape in this boombox. May be called from client or server. */
 	UFUNCTION( BlueprintCallable )
 	void BeginChangeTapeSequence( TSubclassOf< class UFGTapeData > newTape, AFGCharacterPlayer* instigatorCharacter );
@@ -159,7 +190,7 @@ public:
 	UFUNCTION( BlueprintCallable )
 	void BeginStopSequence( AFGCharacterPlayer* instigatorCharacter );
 
-	/**  Triggers turbo bass, if it is at all possible. */
+	/**  Triggers turbo bass, if it is at all possible. Returns true if turbobass was triggered. */
 	UFUNCTION( BlueprintCallable )
 	void BeginTurboBassSequence( AFGCharacterPlayer* instigatorCharacter );
 
@@ -300,6 +331,9 @@ public:
 
 	UFUNCTION( BlueprintImplementableEvent, BlueprintCosmetic )
 	void PlayEquipEffects( AFGCharacterPlayer* character );
+
+	/** Updates materials based on the camera mode */
+	void UpdateMaterialsFromCameraMode();
 	
 protected:
 	void SetPlaybackStateFlag( EBoomBoxPlaybackStateBitfield flag, bool set );
@@ -391,8 +425,22 @@ protected:
 	UPROPERTY( EditDefaultsOnly, Category = "Boombox" )
 	float mBoostJumpVelocityRange = 100.f;
 
+	UPROPERTY( EditDefaultsOnly, Category="Equipment" )
+	UMaterialInstance* mFirstPersonTapeMaterial;
+	
+	/** Each Mesh Component should have an entry here to remap its materials to the First person material (one with the panini switch enabled) */
+	UPROPERTY( EditDefaultsOnly, Category = "Equipment")
+	TMap< FName, FFirstPersonMaterialArray > mComponentNameToFirstPersonMaterials;
+
+	/** Backup of each material in the event that the boombox is dropped we can undo the panini projectiion materials*/
+	UPROPERTY()
+	TMap< FName, FFirstPersonMaterialArray > mOriginalMaterials;
+	
 	UPROPERTY()
 	class UMaterialInstanceDynamic* mCachedMaterialInstance = nullptr;
+
+	UPROPERTY()
+	class UMaterialInstanceDynamic* mCachedMaterialInstance1p = nullptr;
 	
 	/**
 	 * State listeners subscribed to this boombox. 
@@ -439,7 +487,7 @@ protected:
 	void PlayTurboBassSequence( AFGCharacterPlayer* instigatorPlayer );
 
 	UFUNCTION( BlueprintImplementableEvent )
-	void OnPlaybackStateChanged( UPARAM(meta = (Bitmask, BitmaskEnum = EBoomBoxPlaybackStateBitfield)) int32 PlaybackState );
+	void OnPlaybackStateChanged( UPARAM(meta = (Bitmask, BitmaskEnum = "/Script/FactoryGame.EBoomBoxPlaybackStateBitfield")) int32 PlaybackState );
 
 	void SetOwningCharacter( class AFGCharacterPlayer* character );
 	AFGCharacterPlayer* GetOwningCharacter() const { return mOwningCharacter; }

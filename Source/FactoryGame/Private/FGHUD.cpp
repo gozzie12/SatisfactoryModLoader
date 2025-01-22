@@ -2,9 +2,8 @@
 
 #include "FGHUD.h"
 
-#if WITH_CHEATS
-void AFGHUD::ToggleCheatBoard(){ }
-#endif 
+DEFINE_LOG_CATEGORY(LogHUD);
+
 AFGHUD::AFGHUD() : Super() {
 	this->mGameUIClass = nullptr;
 	this->mRespawnUIClass = nullptr;
@@ -15,16 +14,13 @@ AFGHUD::AFGHUD() : Super() {
 	this->mRespawnInputComponent = nullptr;
 	this->mRespawnUI = nullptr;
 	this->mGameUI = nullptr;
-	this->mPreviewBuildingWorld = nullptr;
-	this->mPreviewStageClass = nullptr;
-	this->mPreviewActorClass = nullptr;
 	this->mPawnHUD = nullptr;
 	this->mGeneralCrosshair = mDefaultCrosshair;
 }
 void AFGHUD::PostInitializeComponents(){ Super::PostInitializeComponents(); }
-void AFGHUD::BeginPlay(){ }
-void AFGHUD::EndPlay(const EEndPlayReason::Type endPlayReason){ }
-void AFGHUD::DrawHUD(){ }
+void AFGHUD::BeginPlay(){ Super::BeginPlay(); }
+void AFGHUD::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
+void AFGHUD::Tick(float DeltaSeconds){ Super::Tick(DeltaSeconds); }
 void AFGHUD::AddPawnHUD(TSubclassOf<class UUserWidget> widgetClass, APawn* pawn){ }
 void AFGHUD::ShowRespawnUI(){ }
 void AFGHUD::CloseRespawnUI(){ }
@@ -32,18 +28,27 @@ UFGInteractWidget* AFGHUD::RequestInteractWidget(TSubclassOf<  UFGInteractWidget
 UUserWidget* AFGHUD::RequestWidget(TSubclassOf< UUserWidget > widgetClass){ return nullptr; }
 void AFGHUD::ReleaseWidget(UUserWidget* widgetToRelease){ }
 void AFGHUD::ShowDebugInfo(float& YL, float& YPos){ }
-void AFGHUD::SetPreviewActorClass(TSubclassOf<AActor> actorClass){ }
-void AFGHUD::SetPreviewDistance(float previewDistance){ }
-void AFGHUD::SetPreviewView(const FItemView& view){ }
-UTextureRenderTarget2D* AFGHUD::GetPreviewTexture() const{ return nullptr; }
-void AFGHUD::BeginPreviewActor(){ }
-void AFGHUD::EndPreviewActor(){ }
+void AFGHUD::SetShowCrossHair(bool showCrosshair){ }
+void AFGHUD::SetForceHideCrossHair(bool forceHide){ }
 void AFGHUD::SetPumpiMode(bool hideHUD){ }
 void AFGHUD::SetPartialPumpiMode(bool hideHUD){ }
 void AFGHUD::SetHiddenHUDMode(bool hideHUD){ }
 void AFGHUD::SetHUDVisibility(bool hudVisibility){ }
+void AFGHUD::SetCrosshairState(ECrosshairState crosshairState){ }
 void AFGHUD::UpdateCrosshairState_Implementation( AFGCharacterPlayer* player){ }
 void AFGHUD::UpdateCrosshairColorState_Implementation(const FLinearColor& newColor){ }
 void AFGHUD::SetCrustomCrosshairTexture_Implementation(UTexture2D* newTexture){ }
-void AFGHUD::SetupActorPreview(){ }
-USceneComponent* AFGHUD::CreatePreviewComponent( USceneComponent* attachParent,  UActorComponent* componentTemplate, const FName& componentName){ return nullptr; }
+void AFGHUD::ToggleCheatBoard(){ }
+void AFGHUD::OnActorRepresentationAdded(UFGActorRepresentation* actorRepresentation){ }
+void AFGHUD::OnActorRepresentationRemoved(UFGActorRepresentation* actorRepresentation){ }
+void AFGHUD::OnActorRepresentationUpdated(UFGActorRepresentation* actorRepresentation){ }
+void AFGHUD::OnActorRepresentationFiltered(ERepresentationType type, bool visible){ }
+void AFGHUD::OnCultureChanged(){ }
+void AFGHUD::InvalidateCachedTextDimensionsAndGlyphs(){ }
+void AFGHUD::SetCompassEntryVisibility(UFGActorRepresentation* actorRepresentation, bool visible){ }
+void AFGHUD::RegisterCardinalCompassDirections(){ }
+void AFGHUD::OnSetupBinds(){ }
+void AFGHUD::OnViewportResizedEvent_Implementation(){ }
+void AFGHUD::UpdateCrosshair(){ }
+void AFGHUD::OnViewportResized( FViewport* Viewport, uint32 Unused){ }
+void AFGHUD::UpdateCompassData(float deltaTime){ }

@@ -16,9 +16,14 @@ AFGEquipmentChild::AFGEquipmentChild() : Super() {
 	this->bNetUseOwnerRelevancy = true;
 	this->bReplicates = true;
 }
-void AFGEquipmentChild::BeginPlay(){ }
+void AFGEquipmentChild::BeginPlay(){ Super::BeginPlay(); }
 void AFGEquipmentChild::Equip( AFGCharacterPlayer* character,  AFGEquipment* parentEquipment){ }
 void AFGEquipmentChild::UnEquip(){ }
 void AFGEquipmentChild::OnEquip_Implementation( AFGCharacterPlayer* character){ }
 void AFGEquipmentChild::OnUnEquip_Implementation(){ }
 FTransform AFGEquipmentChild::GetAttachSocketTransform(){ return FTransform(); }
+void AFGEquipmentChild::UpdateMaterialsFromCameraMode(){ }
+void AFGEquipmentChild::OnCameraModeChanged_Implementation(ECameraMode newCameraMode){ }
+void AFGEquipmentChild::SetEquipmentVisibility_Implementation(bool bNewEquipmentVisible){ }
+AFGCharacterPlayer* AFGEquipmentChild::GetInstigatorCharacter() const{ return nullptr; }
+ECameraMode AFGEquipmentChild::GetInstigatorCameraMode() const{ return ECameraMode(); }

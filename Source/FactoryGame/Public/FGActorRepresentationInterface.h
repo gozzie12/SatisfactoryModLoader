@@ -4,13 +4,14 @@
 
 #include "FactoryGame.h"
 #include "FGActorRepresentation.h"
+#include "UObject/Interface.h"
 #include "FGActorRepresentationInterface.generated.h"
 
 /**
 * This interface makes sure this actor gets a representation that is to be shown in compass and
 * in the minimap and similar things.
 */
-UINTERFACE( Blueprintable, meta = ( CannotImplementInterfaceInBlueprint ) )
+UINTERFACE( BlueprintType, NotBlueprintable )
 class FACTORYGAME_API UFGActorRepresentationInterface : public UInterface
 {
 	GENERATED_UINTERFACE_BODY()
@@ -48,6 +49,10 @@ class FACTORYGAME_API IFGActorRepresentationInterface
 	UFUNCTION( BlueprintCallable, Category = "Representation" )
 	virtual class UTexture2D* GetActorRepresentationTexture() = 0;
 
+	/** Fetches the material to use for this actors representation */
+	UFUNCTION( BlueprintCallable, Category = "Representation" )
+	virtual UMaterialInterface* GetActorRepresentationCompassMaterial() = 0;
+	
 	/** Fetches the text to use for this actors representation */
 	UFUNCTION( BlueprintCallable, Category = "Representation" )
 	virtual FText GetActorRepresentationText() = 0;

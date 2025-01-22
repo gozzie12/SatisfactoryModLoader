@@ -6,12 +6,12 @@
 void AFGWheeledVehicleAIController::DrawDebug(float deltaTime, const Input& input, const Output& output){ }
 #endif 
 AFGWheeledVehicleAIController::AFGWheeledVehicleAIController() : Super() {
-	this->mDetection = nullptr;
+
 }
 void AFGWheeledVehicleAIController::OnPossess(APawn* InPawn){ }
 void AFGWheeledVehicleAIController::OnUnPossess(){ }
 const FString& AFGWheeledVehicleAIController::GetCurrentPlanName() const{ return *(new FString); }
-void AFGWheeledVehicleAIController::Tick(float DeltaTime){ }
+void AFGWheeledVehicleAIController::Tick(float DeltaTime){ Super::Tick(DeltaTime); }
 void AFGWheeledVehicleAIController::CalculateInput(float deltaTime, Input& input) const{ }
 AFGWheeledVehicleAIController::Plan AFGWheeledVehicleAIController::PickPlan(const Input& input) const{ return Plan(); }
 void AFGWheeledVehicleAIController::Halt(const Input& input, Output& output){ }

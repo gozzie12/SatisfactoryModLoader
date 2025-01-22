@@ -4,8 +4,9 @@
 
 #include "FactoryGame.h"
 #include "GameFramework/PawnMovementComponent.h"
-#include "WheeledVehicleMovementComponent.h"
+// #include "WheeledVehicleMovementComponent.h"
 #include "FGRailroadVehicle.h"
+#include "UnitHelpers.h"
 #include "FGRailroadVehicleMovementComponent.generated.h"
 
 /**
@@ -168,7 +169,7 @@ public:
 
 	/** Arbitrary maximum speed of this vehicle along the track. [cm/s] */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Railroad|Movement" )
-	FORCEINLINE float GetMaxForwardSpeed() const { return KmHToCmS( mMaxVelocity ); }
+	FORCEINLINE float GetMaxForwardSpeed() const { return FUnits::KmHToCmS( mMaxVelocity ); }
 
 	/** Update the speed of this vehicle to be used in calculations. [cm/s] */
 	FORCEINLINE void SetForwardSpeed( float velocity ) { mVelocity = velocity; }
@@ -316,7 +317,7 @@ protected:
 	/**
 	 * How much cargo, fuel or other extra weight do we have.
 	 */
-	UPROPERTY( EditAnywhere, Category = "VehicleSetup", meta = ( ClampMin = "0.0", UIMin = "0.0" ) )
+	//@todo-trains-client [POTENTIAL BUG] Verify that the payload is always set correctly on the client, it seems to be from my tests in the editor, but I also know that the container is sometimes shown on an empty freight car which is also driven by the inventory content.
 	float mPayloadMass;
 
 	/** DragCoefficient of the vehicle chassis. Good values [0.4, 0.8]. */

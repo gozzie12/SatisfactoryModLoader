@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Hologram/FGFactoryHologram.h"
+#include "FGFactoryHologram.h"
 #include "FGPipeConnectionComponent.h"
 #include "Resources/FGPoleDescriptor.h"
 #include "FGPipelineSupportHologram.generated.h"
@@ -28,26 +28,30 @@ public:
 	AFGPipelineSupportHologram();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 
 	// Begin AFGHologram interface
+	virtual bool IsHologramIdenticalToActor( AActor* actor, const FVector& hologramLocationOffset ) const override;
 	virtual bool DoMultiStepPlacement( bool isInputFromARelease )  override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
 
 	virtual AActor* Construct( TArray<AActor*>& out_children, FNetConstructionID constructionID ) override;
-	virtual void GetSupportedBuildModes_Implementation( TArray< TSubclassOf< UFGHologramBuildModeDescriptor > >& out_buildmodes ) const override;
-	virtual void OnBuildModeChanged() override;
+	virtual void GetSupportedBuildModes_Implementation( TArray< TSubclassOf< UFGBuildGunModeDescriptor > >& out_buildmodes ) const override;
+	virtual void OnBuildModeChanged( TSubclassOf<UFGHologramBuildModeDescriptor> buildMode ) override;
+	virtual bool CanNudgeHologram() const override;
+
+	virtual void GetClearanceData( TArray< const FFGClearanceData* >& out_ClearanceData ) const override;
+
+	virtual void ReplaceHologram( AFGHologram* hologram, bool snapTransform ) override;
 
 	virtual int32 GetBaseCostMultiplier() const override;
 	// End AFGHologram interface
-
-	// Begin FGConstructionMessageInterface
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	// End FGConstructionMessageInterface
-
+	
 	/** Set the height of the support */
 	void SetSupportLength( float height );
+	FORCEINLINE float GetSupportLength() const { return mSupportLength; }
 
 	/** Get the connections the pipeline snaps to */
 	FORCEINLINE UFGPipeConnectionComponentBase* GetSnapConnection() const { return mSnapConnection; }
@@ -64,10 +68,10 @@ public:
 		
 	/** Updates the relative offset for mSupportHeightComponent based on mSupportMesh */
 	void UpdateSupportLengthRelativeLoc();
-
-
+	void UpdateSupportMesh();
+	
 	void Scroll( int32 delta ) override;
-
+	
 protected:
 	// Begin AFGBuildableHologram interface
 	virtual void ConfigureActor( class AFGBuildable* inBuildable ) const override;
@@ -79,14 +83,19 @@ protected:
 
 private:
 	UFUNCTION()
-	void OnRep_SupportMesh();
+	void OnRep_VerticalAngle();
 
+	UFUNCTION()
+	void OnRep_SupportLength();
+	
 protected:
+	FFGClearanceData mClearance;
+	
 	/** The most fitting mesh for our aim height. */
-	UPROPERTY( ReplicatedUsing = OnRep_SupportMesh )
+	UPROPERTY()
 	FPoleHeightMesh mSupportMesh;
 
-	/** if you should be able to adjust the vrticale direction of the connection and top part of the pole*/
+	/** if you should be able to adjust the vertical direction of the connection and top part of the pole*/
 	UPROPERTY( EditDefaultsOnly )
 	bool mCanAdjustVerticalAngle = true;
 private:
@@ -95,10 +104,10 @@ private:
 	UFGPipeConnectionComponentBase* mSnapConnection;
 
 	//Used to rotate the connection and top part vetically
-	UPROPERTY( CustomSerialization )
+	UPROPERTY( ReplicatedUsing = OnRep_VerticalAngle, CustomSerialization )
 	float mVerticalAngle = 0.0f;
 
-	UPROPERTY( CustomSerialization )
+	UPROPERTY( ReplicatedUsing = OnRep_SupportLength, CustomSerialization )
 	float mSupportLength = 0.0f;
 
 	bool mCanAdjustLength;

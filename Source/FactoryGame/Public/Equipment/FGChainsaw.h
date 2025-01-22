@@ -3,11 +3,13 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Equipment/FGEquipment.h"
+#include "FGEquipment.h"
+#include "FGFoliageRemovalSubsystem.h"
 #include "FGInventoryComponent.h"
-#include "Equipment/FGEquipmentAttachment.h"
 #include "FGChainsaw.generated.h"
 
+
+class IFGChainsawableInterface;
 
 USTRUCT()
 struct FACTORYGAME_API FPickedUpInstance
@@ -33,6 +35,27 @@ struct FACTORYGAME_API FPickedUpInstance
 	FVector Location;
 };
 
+UENUM( BlueprintType )
+enum class EFGChainsawState : uint8
+{
+	None,
+	SpinningUp,
+	Idle,
+	Engaged,
+	Sawing
+};
+
+/** Item state struct for the chainsaw */
+USTRUCT( BlueprintType )
+struct FACTORYGAME_API FFGChainsawItemState
+{
+	GENERATED_BODY()
+	
+	/** How much energy do we have stored left in the chainsaw **/
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ItemState|Chainsaw" )
+	float EnergyStored{};
+};
+
 UCLASS()
 class FACTORYGAME_API AFGChainsaw : public AFGEquipment
 {
@@ -46,22 +69,32 @@ public:
 	//~ End AActor interface
 
 	// Begin AFGEquipment interface
-	virtual bool ShouldSaveState() const override;
+	virtual void LoadFromItemState_Implementation(const FFGDynamicStruct& itemState) override;
+	virtual FFGDynamicStruct SaveToItemState_Implementation() const override;
 	virtual void DisableEquipment() override;
+	virtual void Equip(AFGCharacterPlayer* character) override;
 	virtual void UnEquip() override;
+	virtual void AddEquipmentActionBindings() override;
 	// End
 
 	// Replication
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 
-	/** @return true if we are sawing */
+	/** @return the state the chainsaw is currently in. */
+	UFUNCTION( BlueprintPure, Category = "Chainsaw" )
+	FORCEINLINE EFGChainsawState GetChainsawState() const { return mChainsawState; }
+	
+	/** @return true if the player is actively trying to chainsaw, but no valid foliage exists for that */
 	UFUNCTION( BlueprintPure, Category="Chainsaw" )
-	FORCEINLINE bool IsSawEngaged() const{ return mIsSawing; }
+	bool IsSawEngaged() const;
 
 	/** @return true if we are sawing AND we have a valid saw component */
 	UFUNCTION( BlueprintPure, Category = "Chainsaw" )
-	FORCEINLINE bool IsSawing() const {  return mIsSawing && IsValidSawing( mSawingComponent, mSawingInstance ); }
+	bool IsSawing() const;
 
+	/** @return true if we are currently spinning the chainsaw up */
+	UFUNCTION( BlueprintPure, Category = "Chainsaw" )
+	bool IsSpinningUp() const;
 
 	/** In percent, how long into our progress have we gone into sawing down our current tree */
 	UFUNCTION( BlueprintPure, Category = "Chainsaw" )
@@ -72,7 +105,22 @@ public:
 
 	UFUNCTION( BlueprintImplementableEvent, Category = "Chainsaw" )
 	void CreatePhysicsFromFoliage( UStaticMesh* inMesh, FTransform inTransform );
+	
+	/** Return true we have any energy stored or if our owner has any fuel */
+	UFUNCTION( BlueprintPure,  Category = "Chainsaw" )
+	bool HasAnyFuel() const;
+	
 protected:
+	virtual void HandleDefaultEquipmentActionEvent( EDefaultEquipmentAction action, EDefaultEquipmentActionEvent actionEvent ) override;
+
+	/** @return true if the "spinning up" animation has been finished and we should transition to the idle state now */
+	UFUNCTION( BlueprintNativeEvent, Category = "Chainsaw" )
+	bool IsSpinningUpTransitionFinished() const;
+
+	/** Called to notify the blueprint of the chainsaw state transition */
+	UFUNCTION( BlueprintNativeEvent, Category = "Chainsaw" )
+	void OnChainsawStateTransition( const EFGChainsawState oldState );
+	
 	/**
 	 * Consumes fuel, returns false if we are out of fuel
 	 */
@@ -84,15 +132,18 @@ protected:
 	 */
 	void StartSawing();
 
-	UFUNCTION( BlueprintNativeEvent, Category = "Chainsaw" )
-	bool CanStartSawing();
-
 	/**
 	 * Calls StartSawing on server
 	 */
 	UFUNCTION( Reliable, Server, WithValidation )
 	void Server_StartSawing();
-
+	
+	/**
+	 * Calls ToggleAOE on server
+	 */
+	UFUNCTION( BlueprintCallable, Reliable, Server )
+	void Server_ToggleAOE( const bool isAOEOn );
+	
 	/**
 	 * Stops sawing, does no logic check if it's valid, caller is assumed to do so
 	 * If client, calls server
@@ -102,10 +153,14 @@ protected:
 	/** 
 	 * Removes the foliage we just cut down
 	 */
-	UFUNCTION( Reliable, Server, WithValidation )
-	void Server_RemoveChainsawedObject( class USceneComponent* sawingComponent, int foliageIndex, const FVector& effectLocation );
+	UFUNCTION( Reliable, Server )
+	void Server_RemoveFoliageInstance( const struct FFoliageInstanceStableId& stableId, const FVector& effectLocation, const FTransform& instanceTransform );
 
-	void RemoveChainsawedObject( class USceneComponent* sawingComponent, int foliageIndex, const FVector& effectLocation );
+	void RemoveFoliageInstance( const struct FFoliageInstanceStableId& stableId, const FVector& effectLocation, const FTransform& instanceTransform );
+
+	UFUNCTION( Reliable, Server )
+	void Server_RemoveChainsawableObject(const TScriptInterface<IFGChainsawableInterface> &chainsawableObject);
+	void RemoveChainsawableObject(TScriptInterface<IFGChainsawableInterface> chainsawableObject);
 
 	/**
 	 * Removes surrounding foliage around the chainsawedObject and picks it up the within the Collateral pick-up radius
@@ -120,18 +175,11 @@ protected:
 	 */
 	UFUNCTION( Reliable, Server, WithValidation )
 	void Server_StopSawing();
-
-	/** Return true we have any energy stored or if our owner has any fuel */
-	UFUNCTION( BlueprintPure,  Category = "Chainsaw" )
-	bool HasAnyFuel() const;
+	
 
 	/** Returns the current fuel class used for the chainsaw */
 	UFUNCTION(BlueprintPure, Category = "Chainsaw")
 	FORCEINLINE TSubclassOf<class UFGItemDescriptor> GetFuelClass() { return mFuelClass; }
-
-	/** Called from input */
-	void OnPrimaryFirePressed();
-	void OnPrimaryFireReleased();
 
 	/** Start sawing on a new tree */
 	void StartNewSawing( class USceneComponent* sawingComponent, int32 newIndex );
@@ -141,27 +189,26 @@ protected:
 	 */
 	bool IsValidSawing( class USceneComponent* sawingComponent, int32 newIndex ) const;
 	
-	/** Add foliage to player inventory from the component  */
-	void AddToPlayerInventory( class USceneComponent* sawingComponent );
-
-	bool CanPlayerPickupFoliageResource( class UHierarchicalInstancedStaticMeshComponent* meshComponent, bool excludeChainsawable, TArray<FInventoryStack>& out_validStacks );
-
-	/** Play pickup effect */
-	void PlayEffect( FVector atLocation, USceneComponent* sawingComponent );
-
-	///** Hides the outline. Convenience function */
-	//void HideOutline();
-
-	//~ Begin AFGEquipment interface
-	virtual void AddEquipmentActionBindings() override;
-	//~ End AFGEquipment interface
+	bool CanPlayerPickupFoliageResourceForSeeds( class UHierarchicalInstancedStaticMeshComponent* meshComponent, const TArrayView< uint32 > seeds, TArray<FInventoryStack>& out_validStacks );
 
 	/** returns the static mesh of whatever the hell it is this is i hate this */
 	UStaticMesh* GetStaticMesh( USceneComponent* sawingComponent );
 
 	/** returns true if actor is a chainsawable actor, duh */
-	bool IsChainsawableActor( AActor* actor ) const;
-	
+	bool IsChainsawableObject(UObject* object) const;
+
+	/** Transitions the chainsaw to the new state */
+	void TransitionToNewState( const EFGChainsawState newState );
+
+	/** Asks the server to transition to the new state */
+	UFUNCTION( Server, Reliable )
+	void Server_TransitionToNewState( EFGChainsawState newState );
+
+	UFUNCTION()
+	void OnRep_ChainsawState( EFGChainsawState oldState );
+
+	void Input_Toggle( const FInputActionValue& actionValue );
+
 protected:
 	/** The fuel we want to be able to use with the chainsaw */
 	UPROPERTY( EditDefaultsOnly, Category="Chainsaw|Fuel" )
@@ -180,8 +227,8 @@ protected:
 	float mCollateralPickupRadius;
 
 	/** If collateral pickups should exclude chainsawable foliage when using chainsaw */
-	UPROPERTY( EditDefaultsOnly, Category = "Chainsaw|Collateral" )
-	bool mExcludeChainsawableFoliage;
+	UPROPERTY( Replicated, SaveGame, BlueprintReadWrite, Category = "Chainsaw|Collateral" )
+	bool mIsAOEOn = false;
 
 	/** The noise to make when using the chainsaw. */
 	UPROPERTY( EditDefaultsOnly, Category = "Chainsaw" )
@@ -194,48 +241,18 @@ protected:
 	UPROPERTY( SaveGame, Replicated )
 	float mEnergyStored;
 
-	/** How much progress we have done when sawing on a tree */
+	/** How much progress we have done when sawing on a tree. Locally simulated. */
+	UPROPERTY()
 	float mSawingProgress;
 
 	/** Instance we are currently sawing on */
 	int32 mSawingInstance;
 
 	/** Component we are currently sawing on */
+	UPROPERTY( Transient )
 	class USceneComponent* mSawingComponent;
 
-	/** if true, then we are using the chainsaw */
-	uint8 mIsSawing:1;
-
-	/** if true, then we are spinning the chainsaw up */
-	uint8 mIsSpinningUp:1;
-};
-
-UCLASS()
-class FACTORYGAME_API AFGChainsawAttachment : public AFGEquipmentAttachment
-{
-	GENERATED_BODY()
-	
-public:
-	//~ Begin AActor interface
-	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
-	//~ End AActor interface
-	
-	/** Return true we have any energy stored or if our owner has any fuel */
-	UFUNCTION( BlueprintPure, Category = "Chainsaw" )
-	FORCEINLINE bool HasAnyFuel() const { return mHasAnyFuel; }
-	
-	UFUNCTION( BlueprintImplementableEvent )
-	void OnHasAnyFuelUpdated( bool hasAnyFuel );
-
-	UFUNCTION()
-	void SetHasAnyFuel( bool newHasAnyFuel );
-
-protected:
-	UFUNCTION()
-	void OnRep_HasAnyFuel();
-	
-	UPROPERTY( ReplicatedUsing = OnRep_HasAnyFuel )
-	bool mHasAnyFuel;
-	
-};
-
+	/** Current state of the chainsaw, server controlled */
+	UPROPERTY( ReplicatedUsing = OnRep_ChainsawState )
+	EFGChainsawState mChainsawState;
+}; 

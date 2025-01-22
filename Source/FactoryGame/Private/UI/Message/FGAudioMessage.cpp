@@ -3,12 +3,14 @@
 #include "UI/Message/FGAudioMessage.h"
 
 bool FMessageDialogue::HasMoreSubtitlesToShow() const{ return bool(); }
-FMessageSubtitle FMessageDialogue::PopNextSubtitle(float subtitleTimeMultiplier){ return FMessageSubtitle(); }
-bool FPendingMessageQueue::HasUnplayedMessages(){ return bool(); }
-bool FPendingMessageQueue::ContainsAudioMessages(){ return bool(); }
-FPendingMessage FPendingMessageQueue::PopPendingMessage(){ return FPendingMessage(); }
+float FMessageDialogue::GetLength() const{ return float(); }
+FMessageSubtitle FMessageDialogue::PopNextSubtitle(){ return FMessageSubtitle(); }
 #if WITH_EDITOR
-void UFGAudioMessage::MigrateDialogueData(){ }
+float UFGAudioMessage::GetCurrentAudioPlayProgress(){ return float(); }
+void UFGAudioMessage::PauseMessage(){ }
+bool UFGAudioMessage::IsMessagePaused(){ return bool(); }
+void UFGAudioMessage::ResumeMessage(){ }
+void UFGAudioMessage::StopAndDestroyMessage(){ }
 #endif 
 UFGAudioMessage::UFGAudioMessage(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer) {
 	this->mAkAudioComponent = nullptr;
@@ -17,17 +19,25 @@ UFGAudioMessage::UFGAudioMessage(const FObjectInitializer& ObjectInitializer) : 
 	this->mSubtitleTimeMultiplier = 0.065;
 	this->mOverrideText = INVTEXT("");
 	this->mShowOnlyOverrideText = false;
+	this->mMappingContext = nullptr;
 	this->mAudioMessageInputComponent = nullptr;
+	this->mMessage = nullptr;
 }
-void UFGAudioMessage::PostLoad(){ Super::PostLoad(); }
-void UFGAudioMessage::NativeConstruct(){ }
-void UFGAudioMessage::NativeDestruct(){ }
+void UFGAudioMessage::NativeConstruct(){ Super::NativeConstruct(); }
+void UFGAudioMessage::NativeDestruct(){ Super::NativeDestruct(); }
+int32 UFGAudioMessage::GetMessagePriority() const{ return int32(); }
 void UFGAudioMessage::StartPlayback(){ }
 void UFGAudioMessage::OnSkipButtonPressed(){ }
 void UFGAudioMessage::OnSkipButtonReleased(){ }
-void UFGAudioMessage::PlayNextDialogue_Implementation(){ }
+void UFGAudioMessage::PlayNextDialogue_Implementation(bool skipToNextTimeStamp){ }
 void UFGAudioMessage::ContinuePlayback(){ }
+void UFGAudioMessage::SkipToNextSubtitle(){ }
 void UFGAudioMessage::CancelPlayback(){ }
 void UFGAudioMessage::FinishPlayback(){ }
 FAudioSubtitlePair UFGAudioMessage::GetCurrentDialogue(){ return FAudioSubtitlePair(); }
 EMessagePriorityType UFGAudioMessage::GetMessagePriorityType(TSubclassOf< UFGAudioMessage > message, UObject* worldContext){ return EMessagePriorityType(); }
+void UFGAudioMessage::InitMessage( UFGMessage* message){ }
+bool UFGAudioMessage::SkipIncomingAnimation(){ return bool(); }
+bool UFGAudioMessage::DoesMessageContainPresentation() const{ return bool(); }
+void UFGAudioMessage::SetupAkAudioComponent(){ }
+void UFGAudioMessage::TrySkipToSubtitle(){ }

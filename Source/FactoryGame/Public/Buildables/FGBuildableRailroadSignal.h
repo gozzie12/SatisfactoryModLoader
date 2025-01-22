@@ -3,9 +3,9 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "FGRailroadTrackConnectionComponent.h"
-#include "Buildables/FGBuildable.h"
+#include "FGBuildable.h"
 #include "FGRailroadSignalBlock.h"
+#include "FGRailroadTrackConnectionComponent.h"
 #include "FGTrain.h"
 #include "FGBuildableRailroadSignal.generated.h"
 
@@ -28,6 +28,7 @@ public:
 
 	// Begin FGBuildable
 	virtual void OnBuildEffectFinished() override;
+	virtual void OnBuildEffectActorFinished() override;
 	virtual bool ShouldBeConsideredForBase_Implementation() override { return false; }
 	// End FGBuildable
 
@@ -119,6 +120,10 @@ protected:
 	UFUNCTION( BlueprintImplementableEvent, Category = "FactoryGame|Railroad|Signal" )
 	void OnVisualStateChanged();
 
+	/** Called when we want to draw debugging state. */
+	UFUNCTION( BlueprintImplementableEvent, Category = "FactoryGame|Railroad|Signal" )
+	void OnDrawDebugVisualState();
+
 private:
 	/** Called when this signal is about to be removed. */
 	void DisconnectSignal();
@@ -156,12 +161,17 @@ protected:
 	/** Mesh for this signal, must be using the signal factory material for it to work. */
 	UPROPERTY( VisibleAnywhere )
 	UFGColoredInstanceMeshProxy* mSignalComponent;
+
+	/** True if we should draw debug cubes visible from afar, also make the signals always significant, must be set before BeginPlay. */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Debug|Signal" )
+	bool mDrawDebugVisualState;
 	
 private:
 	friend class AFGRailroadSignalHologram;
 	friend class AFGRailroadSubsystem;
 
 	/**
+	 * @todo-trains This was forgotten about, do it when deemed safe. G2 2024-06-14
 	 * DEPRECATED, replaced by mGuardedConnections so we can attach to switch connections.
 	 * REMOVE BEFORE U5, when people internally have had a chance to re-save their games.
 	 */
@@ -170,10 +180,14 @@ private:
 	
 	/**
 	 * A signal can guard and observe many connections if placed on a switch.
-	 * A guarded connection is a connection the train needs to pass when going into the block, this is where the self-driver runs GetSignal() on.
-	 * An observed connection is a connection that this signal observes, the connection on the block side.
+	 * An observed connection is a connection inside the block this signal is observing.
+	 * A guarded connection is a connection outside the block, this is the connection the self-driver interacts with to read the signal's aspect.
+	 * A signal is set as:
+	 *   The facing signal on its guarded connections.
+	 *   The trailing signal on its observer connections.
 	 *
-	 * In the case of a signal on a straight track.
+	 *
+	 * In the case of a signal on a straight track. (Signal direction is left to right)
 	 * 
 	 *          1 GUARDED CONNECTION
 	 *              FOR BLOCK 2
@@ -183,7 +197,7 @@ private:
 	 *                1 OBSERVED
 	 *              BLOCK CONNECTION
 	 *
-	 * In the case of a signal going from 3 tracks merging into 1 track:
+	 * In the case of a signal going from 3 tracks merging into 1 track. (Signal direction is left to right)
 	 *
 	 *          3 GUARDED CONNECTIONS
 	 *               FOR BLOCK 2
@@ -195,7 +209,7 @@ private:
 	 *                 1 OBSERVED
 	 *              BLOCK CONNECTION
 	 *
-	 * In the case of a signal going from 1 track splitting into 3 tracks.
+	 * In the case of a signal going from 1 track splitting into 3 tracks. (Signal direction is left to right)
 	 *
 	 *          1 GUARDED CONNECTIONS
 	 *               FOR BLOCK 2
@@ -207,7 +221,7 @@ private:
 	 *                3 OBSERVED
 	 *             BLOCK CONNECTION
 	 */
-	UPROPERTY( SaveGame )
+	UPROPERTY( SaveGame, Replicated )
 	TArray< class UFGRailroadTrackConnectionComponent* > mGuardedConnections;
 	UPROPERTY( SaveGame )
 	TArray< class UFGRailroadTrackConnectionComponent* > mObservedConnections;
@@ -227,7 +241,7 @@ private:
 	FDelegateHandle mBlockChangedHandle;
 
 	/** Is this a path signal. */
-	UPROPERTY( SaveGame, EditDefaultsOnly, Category = "FactoryGame|Railroad|Signal" )
+	UPROPERTY( SaveGame, EditDefaultsOnly, Category = "Signal" )
 	bool mIsPathSignal;
 
 	/** Is this signal bi-directional mean if this signal is paired with another one facing the opposite direction. */

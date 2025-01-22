@@ -79,13 +79,31 @@ struct FFactoryGameCustomVersion
 		// 2021-12-03: Add support for sublevel saving. World actors are now cached in FGWorldSettings
 		CachedSaveActors,
 
+		// 2022-12-07: Removed the afore-mentioned cached actors array
+		RemovedCachedSaveActors,
+
+		// 2023-01-09: Some attributes of Exponential Height Fog were renamed and changes were matched in UFGBiome
+		ExponentialHeightFogAttributesRenamed,
+
+		// 2023-01-10: Cyclic curves were converted to plain curves in UFGBiome to get rid of the custom UI for the former
+		CyclicCurveDeprecated,
+
+		// 2023-07-14: Migrated FGUserSetting assets to use the ManagerAvailability UClass*, changed the default to be None instead of Options
+		MigratedUserSettingsToManagerClass,
+
+		// 2023-07-18: Always serialize FGRailroadTrackPosition, as opposed to only doing it for SaveGames. Fixes it not being serialized in hologram construction message
+		AlwaysSerializeRailroadTrackPositions,
+
+		// 2023-09-15: Same as MisplacedVersion, meant to place it into the save custom version, but now assets are saved with it.
+		MisplacedVersion2,
+		
 		// -----<new versions can be added above this line>-------------------------------------------------
 		VersionPlusOne,
 		LatestVersion = VersionPlusOne - 1
 	};
 
 	// The GUID for this custom version number
-	const static FGuid GUID;
+	FACTORYGAME_API static const FGuid GUID;
 
 private:
 	FFactoryGameCustomVersion() {}

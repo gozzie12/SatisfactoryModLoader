@@ -4,6 +4,7 @@
 
 #include "FactoryGame.h"
 #include "FGRailroadVehicleMovementComponent.h"
+#include "Curves/CurveFloat.h"
 #include "FGLocomotiveMovementComponent.generated.h"
 
 /**
@@ -29,15 +30,15 @@ struct FReplicatedRailroadVehicleState
 	GENERATED_USTRUCT_BODY()
 	
 	UPROPERTY()
-	int32 ReverserInput;
+	int32 ReverserInput = 0;
 	UPROPERTY()
-	float ThrottleInput;
+	float ThrottleInput = 0.f;
 	UPROPERTY()
-	float DynamicBrakeInput;
+	float DynamicBrakeInput = 0.f;
 	UPROPERTY()
-	float AirBrakeInput;
+	float AirBrakeInput = 0.f;
 	UPROPERTY()
-	bool HornInput;
+	bool HornInput = false;
 };
 
 USTRUCT()
@@ -82,6 +83,7 @@ public:
 	UFGLocomotiveMovementComponent();
 	
 	// Begin UActorComponent Interface
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	virtual void TickComponent( float dt, enum ELevelTick tickType, FActorComponentTickFunction *thisTickFunction ) override;
 	// End UActorComponent Interface
 
@@ -176,19 +178,19 @@ protected:
 	/** Get dynamic braking force at the given speed. [N] [kg cm/s^2] */
 	FORCEINLINE float CalcDynamicBrakingEffort( float atSpeed ) const
 	{
-		return kNToN( MToCm( mDynamicBrakingEffortCurve.GetRichCurveConst()->Eval( CmSToKmH( atSpeed ) ) ) );
+		return kNToN( MToCm( mDynamicBrakingEffortCurve.GetRichCurveConst()->Eval( FUnits::CmSToKmH( atSpeed ) ) ) );
 	}
 
 	/** Get the tractive force at the given speed. [N] [kg cm/s^2] */
 	FORCEINLINE float CalcTractiveEffort( float atSpeed ) const
 	{
-		return kNToN( MToCm( mTractiveEffortCurve.GetRichCurveConst()->Eval( CmSToKmH( atSpeed ) ) ) );
+		return kNToN( MToCm( mTractiveEffortCurve.GetRichCurveConst()->Eval( FUnits::CmSToKmH( atSpeed ) ) ) );
 	}
 
 	/** Get dynamic braking force at the given speed. [N] [kg cm/s^2] */
 	FORCEINLINE float CalcRegenerativePowerFactor( float atSpeed ) const
 	{
-		return mRegenerativePowerCurve.GetRichCurveConst()->Eval( CmSToKmH( atSpeed ) );
+		return mRegenerativePowerCurve.GetRichCurveConst()->Eval( FUnits::CmSToKmH( atSpeed ) );
 	}
 
 	/** Compute dynamic brake input */
@@ -207,9 +209,13 @@ protected:
 	void UpdateState( float dt, const UFGLocomotiveMovementComponent* master );
 
 	/** Pass current state to server */
-	UFUNCTION( Unreliable,Server, WithValidation )
+	UFUNCTION( Unreliable, Server, WithValidation )
 	void ServerUpdateState( int32 inReverserInput, int32 inSteeringInput, float inThrottleInput, float inDynamicBrakeInput, float inAirBrakeInput, bool inHornInput );
 
+	/** Pass current automated driving state to the server */
+	UFUNCTION( Unreliable, Server, WithValidation )
+	void ServerUpdateAutomatedDrivingState( bool inHornInput );
+	
 	/** Update the clients state from the replicated state */
 	UFUNCTION()
 	void UseReplicatedState();
@@ -222,7 +228,7 @@ private:
 	void UseMultipleUnitMasterState( const UFGLocomotiveMovementComponent* master );
 
 protected:
-	// replicated state of vehicle
+	// replicated state of vehicle @todo-trains-client [OPTIMIZATION] This is replicated to everyone right now, for every movement, ideally we replicate this for the multiple unit master and copy the input to the other locomotives.
 	UPROPERTY( Transient, Replicated )
 	FReplicatedRailroadVehicleState mReplicatedState;
 

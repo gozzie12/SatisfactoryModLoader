@@ -3,14 +3,60 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableFactory.h"
-#include "Resources/FGResourceDescriptor.h"
+#include "FGBuildableFactory.h"
 #include "Resources/FGExtractableResourceInterface.h"
+#include "Resources/FGResourceDescriptor.h"
 #include "FGBuildableResourceExtractorBase.generated.h"
 
 #if UE_BUILD_SHIPPING == 0
 #define DEBUG_RESOURCE_EXTRACTORS
 #endif
+
+UCLASS()
+class FACTORYGAME_API UFGResourceExtractorClipboardRCO : public UFGRemoteCallObject
+{
+	GENERATED_BODY()
+public:
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
+	
+	UFUNCTION( Server, Reliable )
+	void Server_PasteSettings( class AFGBuildableResourceExtractorBase* extractor, AFGCharacterPlayer* player, float overclock, float productionBoost, TSubclassOf<UFGPowerShardDescriptor> overclockingShard, TSubclassOf<UFGPowerShardDescriptor> productionBoostShard );
+
+private:
+	UPROPERTY( Replicated, Meta = ( NoAutoJson ) )
+	bool mForceNetField_UFGResourceExtractorClipboardRCO = false;
+
+};
+
+UCLASS()
+class FACTORYGAME_API UFGResourceExtractorClipboardSettings : public UFGFactoryClipboardSettings
+{
+	GENERATED_BODY()
+public:
+	/** The potential we would like to apply */
+	UPROPERTY( BlueprintReadWrite )
+	float mTargetPotential;
+
+	/** The production boost we would like to apply */
+	UPROPERTY( BlueprintReadWrite )
+	float mTargetProductionBoost;
+
+	/** The calculated potential we can apply with the shards/crystals we have. Used to simulate UI changes */
+	UPROPERTY( BlueprintReadWrite )
+	float mReachablePotential;
+
+	/** The calculated production we can apply with the shards we have */
+	UPROPERTY( BlueprintReadWrite )
+	float mReachableProductionBoost;
+
+	/** Descriptor for the overclocking shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mOverclockingShardDescriptor;
+
+	/** Descriptor for the production boost shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mProductionBoostShardDescriptor;
+};
 
 /**
  * The base class for all resource extractors, i.e. miners and pumps.
@@ -42,6 +88,12 @@ public:
 	virtual void PostLoadGame_Implementation( int32 saveVersion, int32 gameVersion ) override;
 	// End Save Interface
 
+	//~ Begin IFGFactoryClipboardInterface
+	virtual bool CanUseFactoryClipboard_Implementation() override { return true; }
+	virtual UFGFactoryClipboardSettings* CopySettings_Implementation() override;
+	virtual bool PasteSettings_Implementation( UFGFactoryClipboardSettings* settings ) override;
+	//~ End IFGFactoryClipboardInterface
+
 	/** [DEPRECATED] - Use GetExtractableResource() instead.
 	*	Get the resource node this miner is mining from. */
 	FORCEINLINE class AFGResourceNode* GetResourceNode() const{ return mExtractResourceNode; }
@@ -58,7 +110,7 @@ public:
 
 	/** Gets particle for mining */
 	UFUNCTION( BlueprintPure, Category = "Resources" )
-	class UParticleSystem* GetMiningParticle();
+	class UFXSystemAsset* GetMiningParticle();
 
 	 //type names are used to match types for upgrades and such
 	FName GetExtractorTypeName() const { return mExtractorTypeName; }

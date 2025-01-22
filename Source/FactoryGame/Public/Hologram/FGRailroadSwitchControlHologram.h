@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Hologram/FGBuildableHologram.h"
+#include "FGBuildableHologram.h"
 #include "FGRailroadSwitchControlHologram.generated.h"
 
 /**
@@ -37,6 +37,6 @@ protected:
 	// End AFGHologram
 
 private:
-	UPROPERTY()
+	UPROPERTY( CustomSerialization )
 	class UFGRailroadTrackConnectionComponent* mControlledConnection;
 };

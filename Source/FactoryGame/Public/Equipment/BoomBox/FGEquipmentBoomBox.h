@@ -4,14 +4,11 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "FGBoomBoxPlayer.h"
 #include "DamageTypes/FGPointDamageType.h"
 #include "Equipment/FGEquipment.h"
+#include "FGBoomBoxPlayer.h"
 #include "FGEquipmentBoomBox.generated.h"
 
-/**
- * 
- */
 UCLASS()
 class FACTORYGAME_API AFGEquipmentBoomBox : public AFGEquipment
 {
@@ -28,6 +25,12 @@ protected:
 
 	UFUNCTION( BlueprintImplementableEvent )
 	void PlayEquipEffects();
+
+	UFUNCTION( BlueprintImplementableEvent )
+	void OnBeginTurbobassSequence();
+
+	UFUNCTION( BlueprintImplementableEvent )
+	void OnMenuOpen();
 	
 	virtual void WasEquipped_Implementation() override;
 	virtual void WasUnEquipped_Implementation() override;
@@ -37,13 +40,27 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const;
-	virtual bool ShouldSaveState() const override;
+	virtual FFGDynamicStruct SaveToItemState_Implementation() const override;
+	virtual void LoadFromItemState_Implementation(const FFGDynamicStruct& itemState) override;
 
 	UFUNCTION()
 	void OnRep_BoomBoxPlayer( class AFGBoomBoxPlayer* oldPlayer );
 		
 	UPROPERTY( BlueprintReadOnly, ReplicatedUsing=OnRep_BoomBoxPlayer, SaveGame )
 	class AFGBoomBoxPlayer* mBoomBoxPlayer = nullptr;
+
+	/** Cached item state, stored here in case we do not have a boombox when we receive LoadFromItemState. In that case we will load again in BeginPlay */
+	UPROPERTY( Transient )
+	FFGDynamicStruct mCachedItemState{};
+
+	virtual void AddEquipmentActionBindings() override;
+
+	/** Input Actions */
+	void Input_PlayPause( const FInputActionValue& actionValue );
+	void Input_Turbobass( const FInputActionValue& actionValue );
+	void Input_ToggleMenu( const FInputActionValue& actionValue );
+	void Input_PutDown( const FInputActionValue& actionValue );
+
 private:
 	friend class AFGBoomBoxPlayer;
 

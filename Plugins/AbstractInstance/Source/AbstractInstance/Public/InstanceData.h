@@ -7,6 +7,8 @@
 #include "Engine/StaticMesh.h"
 #include "InstanceData.generated.h"
 
+class ULightweightCollisionComponent;
+
 USTRUCT( BlueprintType )
 struct ABSTRACTINSTANCE_API FInstanceData
 {
@@ -61,7 +63,13 @@ struct ABSTRACTINSTANCE_API FInstanceData
 	bool bCastDistanceFieldShadows = true;
 
 	UPROPERTY( EditDefaultsOnly )
-	FFloatRange DrawDistance;
+	float MaxDrawDistance = -1;
+
+	UPROPERTY( EditDefaultsOnly )
+	float MaxWPODistance = 50000;
+
+	UPROPERTY( EditDefaultsOnly )
+	uint8 bWorldPositionOffsetWritesVelocity = false;
 	
 	/*	TODO: UNIMPLEMENTED.
 	 * Do we allow the instances to be spawned after initial submit?
@@ -77,6 +85,12 @@ struct ABSTRACTINSTANCE_API FInstanceData
 	
 public:
 	UStaticMeshComponent* CreateStaticMeshComponent( UObject* Outer ) const;
+};
+
+/** Base class that can be used to store metadata on instance handles */
+struct FInstanceHandleMetadata
+{
+	virtual ~FInstanceHandleMetadata() = default;
 };
 
 USTRUCT( BlueprintType )
@@ -112,7 +126,8 @@ public:
 
 	FORCEINLINE bool IsValid() const
 	{
-		return InstancedStaticMeshComponent.IsValid() && BatchCollisionMeshComponent.IsValid() && IsInstanced() && CollisionHandleID != INDEX_NONE;
+		return true; // TODO
+		//return InstancedStaticMeshComponent.IsValid() && BatchCollisionMeshComponent.IsValid() && IsInstanced() && CollisionHandleID != INDEX_NONE;
 	}
 
 	FORCEINLINE void SetInstanceVisibility(bool bNewState, bool bMarkRenderStateDirty = true)
@@ -128,12 +143,19 @@ public:
 	}
 	
 	void HideInstance( bool bMarkRenderStateDirty = true );
-	void HideInstance( UHierarchicalInstancedStaticMeshComponent* Hism, int32 Id, bool bMarkRenderStateDirty = true ) const;
+	void HideInstance( UHierarchicalInstancedStaticMeshComponent* Hism, int32 Id, bool bMarkRenderStateDirty = true );
 
 	void UnHideInstance(bool bMarkRenderStateDirty = true);
 	
 	void UpdateTransform(const FTransform& T) const;
 	void UpdateScale(const FVector& NewScale) const;
+
+	FORCEINLINE void SetIsBigOffsetHidden( bool newIsBigOffsetHidden ) { IsBigOffsetHidden = newIsBigOffsetHidden; }
+
+	FORCEINLINE void SetOwner( AActor* owner )
+	{
+		Owner = owner;
+	}
 	
 	FORCEINLINE AActor* GetOwner() const
 	{
@@ -153,12 +175,14 @@ public:
 
 	void SetPrimitiveDataByArray( const TArray<float> &Data, bool bMarkDirty ) const;
 	void SetPrimitiveDataByID( const float Value, const int32 Index, bool bMarkDirty ) const;
-
+	int32 GetNumPrimitiveData() const { return NumPrimitiveFloatData; }
 private:
 	// Instance id.
 	uint32 HandleID = INDEX_NONE;
 
 	uint32 CollisionHandleID = INDEX_NONE;
+
+	bool IsBigOffsetHidden = false;
 
 	UPROPERTY(VisibleInstanceOnly)
 	TWeakObjectPtr<AActor> Owner;
@@ -170,11 +194,16 @@ private:
 	UPROPERTY(VisibleInstanceOnly)
 	TWeakObjectPtr< UInstancedStaticMeshComponent > BatchCollisionMeshComponent;
 
+	// Transient data, flushed after adding to the system.
 	TArray<float> CustomData;
 
+	int32 NumPrimitiveFloatData;
+	
 	/* Used for hiding */
 	mutable FVector Scale;
-	
+public:
+	/** Metadata set on the instance. Can be used to store additional data associated with the instance handle */
+	TSharedPtr<FInstanceHandleMetadata> Metadata;
 public:
 	
 	FInstanceHandle( uint32 inIndex, uint32 inCollisionID, AActor* inOwner, UHierarchicalInstancedStaticMeshComponent* inInstancedStaticMeshComponent, UInstancedStaticMeshComponent* inBatchCollision )

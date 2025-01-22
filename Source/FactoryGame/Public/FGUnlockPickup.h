@@ -5,8 +5,13 @@
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
 #include "FGItemPickup.h"
-#include "GameFramework/Actor.h"
+#include "NativeGameplayTags.h"
 #include "FGUnlockPickup.generated.h"
+
+struct FPickupTags
+{
+	static FNativeGameplayTag PickedUpBoomboxTape;
+};
 
 /**
  * The state an unlock pickup can be in
@@ -45,6 +50,7 @@ public:
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 	virtual void Serialize( FArchive& ar ) override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay( const EEndPlayReason::Type EndPlayReason ) override;
 	// End
 
 
@@ -53,7 +59,7 @@ public:
 	// End
 
 	// Begin IFGUseableInterface
-	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) const override;
+	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) override;
 	virtual void OnUse_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual bool IsUseable_Implementation() const override;
 	virtual FText GetLookAtDecription_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) const override;
@@ -74,7 +80,7 @@ protected:
 	/**
 	 * Use this event to update the visual representation of the pick-up in relation to @mPickupState
 	 */ 
-	UFUNCTION( BlueprintImplementableEvent, BlueprintCosmetic, Category = "Pickup" )
+	UFUNCTION( BlueprintNativeEvent, Category = "Pickup" )
 	void UpdateVisuals();
 
 	UFUNCTION()

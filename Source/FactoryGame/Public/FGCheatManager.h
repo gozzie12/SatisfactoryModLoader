@@ -8,9 +8,99 @@
 #include "FGCreatureSubsystem.h"
 #include "FGCheatManager.generated.h"
 
+/** Will store one per parameter in the function cheat in the cheat board */
+USTRUCT()
+struct FCheatBoardParamSelectionData
+{
+	GENERATED_BODY()
 
-UCLASS( Within = PlayerController, Config = Editor )
-class FACTORYGAME_API UFGCheatManager : public UCheatManager
+	/** Last value that the user has inputted in the input text box */
+	UPROPERTY( Config )
+	FString LastInputValue;
+	
+	/** Last value that the user selected as a filter in the filter text box */
+	UPROPERTY( Config )
+	FString LastFilterValue;
+
+	/** Name of the last item that was selected for this parameter */
+	UPROPERTY( Config )
+	FString LastItemSelectedName;
+};
+
+/** Identifier for a function in a cheat board */
+USTRUCT()
+struct FCheatBoardFunctionSelectionData
+{
+	GENERATED_BODY()
+
+	/** Selection data for each parameter of a function */
+	UPROPERTY( Config )
+	TMap<FName, FCheatBoardParamSelectionData> ParamSelections;
+};
+
+/** Implement this on CheatManager of CheatManagerExtension to provide category information to the Cheat Board. */
+UINTERFACE( NotBlueprintable )
+class FACTORYGAME_API UFGCheatBoardFunctionCategoryProvider : public UInterface
+{
+	GENERATED_BODY()
+};
+
+class FACTORYGAME_API IFGCheatBoardFunctionCategoryProvider
+{
+	GENERATED_BODY()
+public:
+	/** Returns a map of function names to their Category values. You are supposed to cache them from Metadata during cook time and return the cached values in runtime */
+	virtual TMap<FString, FString> GetFunctionCategories() const = 0;
+};
+
+/** Allows filtering and visually transforming values of arguments passed to the cheat through the cheat board (currently only supports classes and objects) */
+class FACTORYGAME_API IFGCheatBoardParameterFilter
+{
+public:
+	virtual ~IFGCheatBoardParameterFilter() = default;
+
+	virtual FString GetPrettifiedClassName( UClass* InClass ) const;
+	virtual bool IsClassFilteredOut( UClass* InClass ) const { return false; }
+	virtual FString GetPrettifiedAssetName( UObject* InAsset ) const;
+	virtual bool IsAssetFilteredOut( UObject* InAsset ) const { return false; }
+};
+
+/** Wraps parameter filter into a struct that can be passed around */
+USTRUCT()
+struct FACTORYGAME_API FFGCheatBoardParameterFilter
+{
+	GENERATED_BODY()
+
+	TSharedPtr<IFGCheatBoardParameterFilter> Filter;
+};
+
+/** Wraps parameter filter into a struct bound to a specific parameter type */
+USTRUCT()
+struct FACTORYGAME_API FFGCheatBoardGlobalParameterFilter : public FFGCheatBoardParameterFilter
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TObjectPtr<UClass> BaseClassType;
+
+	UPROPERTY()
+	TObjectPtr<UClass> BaseAssetType;
+};
+
+/** Item filter for item descriptors. Exposed here to easily allow taking alternative resource forms on demand. */
+class FFGCheatBoardParameterFilter_ItemDescriptor : public IFGCheatBoardParameterFilter
+{
+public:
+	explicit FFGCheatBoardParameterFilter_ItemDescriptor( const EResourceForm InResourceForm ) : mTargetResourceForm( InResourceForm ) {}
+
+	virtual FString GetPrettifiedClassName( UClass* InClass ) const override;
+	virtual bool IsClassFilteredOut( UClass* InClass ) const override;
+private:
+	EResourceForm mTargetResourceForm{};
+};
+
+UCLASS( Within = PlayerController, Config = EditorPerProjectUserSettings, ProjectUserConfig )
+class FACTORYGAME_API UFGCheatManager : public UCheatManager, public IFGCheatBoardFunctionCategoryProvider
 {
 	GENERATED_BODY()
 public:
@@ -20,18 +110,21 @@ public:
 	
 	// Begin UObject interface
 	virtual bool IsSupportedForNetworking() const override;
-	virtual bool ReplicateSubobjects( class UActorChannel *Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags );
 	virtual int32 GetFunctionCallspace( UFunction* Function, FFrame* Stack ) override;
 	virtual bool CallRemoteFunction( UFunction* Function, void* Parameters, FOutParmRec* OutParms, FFrame* Stack ) override;
-	virtual void PreSave( const ITargetPlatform* TargetPlatform ) override;
+	virtual void PreSave( FObjectPreSaveContext saveContext ) override;
 	// End UObject interface
+
+	// Begin IFGCheatBoardFunctionCategoryProvider interface
+	virtual TMap<FString, FString> GetFunctionCategories() const override { return mFunctionCategories; }
+	// End IFGCheatBoardFunctionCategoryProvider interface
 
 	/** Applies default cheats when "EnableCheats" command is triggered. */
 	void InitDefaultCheats();
 
-	/** Get function categories for populating the UI. */
-	FORCEINLINE TMap< FString, FString > GetFunctionCategories() { return mFunctionCategories; }
-	
+	/** Returns all registered cheat manager extensions */
+	FORCEINLINE TArray<TObjectPtr<UCheatManagerExtension>> GetCheatManagerExtensions() const { return CheatManagerExtensions; }
+
 	/** Used to toggle cheat menu from console. Migrated here from the old FGHUD solution and kept the naming */
 	UFUNCTION( exec )
 	void Cheats();
@@ -45,6 +138,10 @@ public:
 	void NoCost( bool enabled );
 	UFUNCTION( exec, CheatBoard )
 	bool NoCost_Get();
+	UFUNCTION( exec, CheatBoard, Category = "Resources" )
+	void NoUnlockCost( bool enabled );
+	UFUNCTION( exec, CheatBoard )
+	bool NoUnlockCost_Get();
 	UFUNCTION( Server, Reliable )
 	void Server_NoPower( bool enabled );
 	UFUNCTION( exec, CheatBoard, Category = "Resources" )
@@ -73,13 +170,25 @@ public:
 	void Server_GiveItemsSingle( class AFGCharacterPlayer* character, TSubclassOf< class UFGItemDescriptor > resource, int32 numberOfItems );
 	UFUNCTION( exec, CheatBoard, Category = "Resources:-3", meta = ( ToolTip="Give the number of items specified." ))
 	void GiveItemsSingle( TSubclassOf< class UFGItemDescriptor > resource, int32 numberOfItems );
-	UFUNCTION( exec, Category = "Resources" )
-	void ClearGiveItemPopularList();
+	UFUNCTION( exec, CheatBoard, Category = "Resources:-1", meta = ( ToolTip="Give the number of full item stacks specified. Will expand inventory if needed. Becareful with too high numbers.") )
+	void GiveUploadItemStack( TSubclassOf< class UFGItemDescriptor > resource );
+	UFUNCTION( Server, Reliable )
+	void Server_GiveUploadItemStack( class AFGCharacterPlayer* character, TSubclassOf< class UFGItemDescriptor > resource );
+	UFUNCTION( Exec, CheatBoard, Category = "Resources", meta = ( ToolTip = "Clear the inventory of the player" ) )
+	void ClearInventory();
+	UFUNCTION( Server, Reliable )
+	void Server_ClearInventory();
 	UFUNCTION( Server, Reliable )
 	void Server_GiveResourceSinkCoupons( int32 numCoupons );
 	UFUNCTION( exec, CheatBoard, Category = "Resources:-2", meta = ( ToolTip = "Give the number of coupons specified" ) )
 	void GiveResourceSinkCoupons( int32 numCoupons );
-
+	UFUNCTION( exec, CheatBoard, Category = "Resources" )
+	void EnableCreativeMode();
+	UFUNCTION( Server, Reliable )
+	void Server_SetCentralStorageUploadSpeed( float seconds );
+	UFUNCTION( exec, CheatBoard, Category = "Resources", meta = ( ToolTip = "This will not save the value. Just for runtime debugging" )  )
+	void SetCentralStorageUploadSpeed( float seconds );
+	
 	/****************************************************************
 	 * UI
 	 ****************************************************************/
@@ -119,6 +228,10 @@ public:
 	void Server_SetSlomo( float slomo );
 	UFUNCTION( exec, CheatBoard, category = "Time" )
 	void SetSlomo( float slomo );
+	UFUNCTION( exec, CheatBoard, category = "Time" )
+	void SetNumberOfDaysSinceLastDeath( int32 newNumberOfDaysSinceLastDeath );
+	UFUNCTION( Server, Reliable )
+	void Server_SetNumberOfDaysSinceLastDeath( int32 newNumberOfDaysSinceLastDeath );
 	UFUNCTION( Server, Reliable )
 	void Server_SetPlanetPosition( float value );
 	UFUNCTION( exec, CheatBoard, category = "World|Planets" )
@@ -139,6 +252,30 @@ public:
 	void ForceSetWeatherType( TSubclassOf<class AFGWeatherReaction> Reaction );
 	UFUNCTION( exec, CheatBoard, category = "World|Weather" )
 	void LockWeather(bool bState);
+	UFUNCTION( exec, CheatBoard, category = "World|Debug" )
+	void HighlightPickupable( TSubclassOf< AFGItemPickup > pickupClass );
+	UFUNCTION( exec, CheatBoard, category = "World|Debug" )
+	void HighlightCrashSites();
+	UFUNCTION( exec, CheatBoard, category = "World|Debug" )
+	void ClearHighlightedActors();
+	UFUNCTION()
+	void Internal_HighlightPickupables();
+	UFUNCTION( Server, Reliable )
+	void Server_TriggerRandomWorldEvent();
+	UFUNCTION( exec, CheatBoard, category = "World|WorldEvents" )
+	void TriggerRandomWorldEvent();
+	UFUNCTION( Exec, CheatBoard, Category = "World|Debug" )
+	void RunGameplayTest( TSubclassOf<class UFGGameplayTest> gameplayTest );
+	UFUNCTION( Server, Reliable )
+	void Server_RunGameplayTest( TSubclassOf<class UFGGameplayTest> gameplayTest );
+	UFUNCTION( Server, Reliable )
+	void Server_SetSAMIntensity( int32 newSAMIntensity );
+	UFUNCTION( exec, CheatBoard, category = "World|Alien" )
+	void SetSAMIntensity( int32 newSAMIntensity );
+	UFUNCTION( Server, Reliable )
+	void Server_SpawnFallingGiftBundle();
+	UFUNCTION( exec, CheatBoard, category = "Creature" )
+	void SpawnFallingGiftBundle();
 	
 	/****************************************************************
 	 * Creatures
@@ -166,6 +303,29 @@ public:
 	/** Forces active spawners to spawn creatures even if the creature isn't set to spawn yet (because of day/night restrictions etc) */
 	UFUNCTION( exec, CheatBoard, category = "Creature" )
 	void Creature_ForceSpawnCreatures();
+	UFUNCTION( Server, Reliable )
+	void Server_Creature_AddCreatureOverride( TSubclassOf< class AFGCreature > creatureClassToReplace, TSubclassOf< class AFGCreature > creatureClassOverride );
+	/** Adds a creature class override, so trying to spawn a creature of a certain type will instead spawn another. Override with null to disable the creature, override with the same creature to re-enable it. */
+	UFUNCTION( exec, CheatBoard, category = "Creature" )
+	void Creature_AddCreatureOverride( TSubclassOf< class AFGCreature > creatureClassToReplace, TSubclassOf< class AFGCreature > creatureClassOverride );
+	UFUNCTION( Server, Reliable )
+	void Server_Creature_SetArachnidCreaturesDisabled( bool disabled );
+	/** Whether or not to enable / disable arachnid creatures from spawning. */
+	UFUNCTION( exec, CheatBoard, category = "Creature" )
+	void Creature_SetArachnidCreaturesDisabled( bool disabled );
+
+	/****************************************************************
+	 * Vehicles
+	 ****************************************************************/
+	UFUNCTION( Server, Reliable )
+    void Server_Vehicle_SpawnNew( TSubclassOf< class AFGVehicle > vehicleClass, int32 numToSpawn );
+    UFUNCTION( exec, CheatBoard, category = "Vehicle" )
+    void Vehicle_SpawnNew( TSubclassOf< class AFGVehicle > vehicleClass, int32 numToSpawn = 1 );
+
+	UFUNCTION( Server, Reliable )
+	void Server_Vehicle_BringIdleDrones();
+	UFUNCTION( exec, CheatBoard, category = "Vehicle" )
+	void Vehicle_BringIdleDrones();
 
 	/****************************************************************
 	 * Player
@@ -187,10 +347,6 @@ public:
 	UFUNCTION( exec, CheatBoard, category = "Player" )
 	void UpdatePlayerNametags();
 	UFUNCTION( exec, category = "Player" )
-	void EnablePlayerFOV( bool enable );
-	UFUNCTION( exec, category = "Player" )
-	bool EnablePlayerFOV_Get();
-	UFUNCTION( exec, category = "Player" )
 	void DestroyPawn();
 	UFUNCTION( exec, CheatBoard, category = "Player" )
 	void ToggleCameraMode();
@@ -202,7 +358,77 @@ public:
 	void SetRandomDebugStartingPoint();
 	UFUNCTION( exec, CheatBoard, category = "Player|Rules" )
 	void SetCreatureHostility( EPlayerHostilityMode hostility );
-
+	/** Makes the player into the server admin. That does not change the admin password, but gives temporarily privileges to the logged in player. Only available in non-Shipping builds */
+	UFUNCTION( Exec, CheatBoard, Category = "Player|Server" )
+	void PromoteToServerAdmin();
+	/** Revokes the admin permissions from the logged in player temporarily. Does not change admin password. Only available in non-Shipping builds */
+	UFUNCTION( Exec, CheatBoard, Category = "Player|Server" )
+	void DemoteToServerPlayer();
+	UFUNCTION( Server, Reliable )
+	void Server_PromoteToServerAdmin( bool isAdminNow );
+	/** Collects items from all of the crates in the world to the player inventory */
+	UFUNCTION( Exec, CheatBoard, Category = "Player" )
+	void CollectAllCrates();
+	UFUNCTION( Server, Reliable )
+	void Server_CollectAllCrates();
+	/** Brings all unpossessed player pawns to the player location */
+	UFUNCTION( Exec, CheatBoard, Category = "Player" )
+	void BringAllUnpossessedPawnsHere();
+	UFUNCTION( Server, Reliable )
+	void Server_BringAllUnpossessedPawnsHere();
+	/** Kills the currently possessed pawn. */
+	UFUNCTION( Exec, CheatBoard, Category = "Player" )
+	void Die();
+	UFUNCTION( Server, Reliable )
+	void Server_Die();
+	/** Revives the currently possessed pawn */
+	UFUNCTION( Exec, CheatBoard, Category = "Player" )
+	void ReviveSelf();
+	UFUNCTION( Server, Reliable )
+	void Server_ReviveSelf();
+	/** Ragdolls the character */
+	UFUNCTION( Exec, CheatBoard, Category = "Player" )
+	void RagdollSelf();
+	UFUNCTION( Server, Reliable )
+	void Server_RagdollSelf();
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void GodMode( bool enabled );
+	UFUNCTION( Server, Reliable )
+	void Server_GodMode( bool enabled );
+	UFUNCTION( Exec, CheatBoard )
+	bool GodMode_Get() const;
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void SetMaxHealth( float newMaxHealth );
+	UFUNCTION( Server, Reliable )
+	void Server_SetMaxHealth( float newMaxHealth );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void Heal();
+	UFUNCTION( Server, Reliable )
+	void Server_Heal();
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void DamageSelf( float damage );
+	UFUNCTION( Server, Reliable )
+	void Server_DamageSelf( float damage );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void StopPossessingCharacter();
+	UFUNCTION( Server, Reliable )
+	void Server_StopPossessingCharacter();
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void PossessCharacterAtIndex( int32 characterIndex );
+	UFUNCTION( Server, Reliable )
+	void Server_PossessCharacterAtIndex( int32 characterIndex );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void SetPlayerPrimaryCustomizationColor( const FString& NewColorHex );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void SetPlayerSecondaryCustomizationColor( const FString& NewColorHex );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void SetPlayerDetailCustomizationColor( const FString& NewColorHex );
+	UFUNCTION( Exec, Category = "Player", CheatBoard )
+	void SetPlayerCustomizationHelmetDesc( TSubclassOf<UFGPlayerHelmetCustomizationDesc> NewHelmetDesc );
+	/** Fast forwards currently playing intro sequence N seconds forward */
+	UFUNCTION( Exec, Category = "Player|Intro", CheatBoard )
+	void FastForwardIntroSequence( float SecondsToFastForward );
+	
 	/****************************************************************
 	 * Foliage
 	 ****************************************************************/
@@ -259,9 +485,9 @@ public:
 	UFUNCTION( exec, CheatBoard, category = "Research" )
 	void GiveSchematicsOfTier( int32 tier );
 	UFUNCTION( Server, Reliable )
-	void Server_SetGamePhase( EGamePhase phase );
+	void Server_SetGamePhase( UFGGamePhase* gamePhase );
 	UFUNCTION( exec, CheatBoard, category = "Research" )
-	void SetGamePhase( EGamePhase phase );
+	void SetGamePhase( UFGGamePhase* gamePhase );
 	UFUNCTION( Server, Reliable )
 	void Server_SetNextGamePhase();
 	UFUNCTION( exec, CheatBoard, category = "Research" )
@@ -274,6 +500,14 @@ public:
 	void Server_ResetHubTutorial();
 	UFUNCTION( exec, CheatBoard, category = "Research" )
 	void ResetHubTutorial();
+	UFUNCTION( Server, Reliable )
+	void Server_SkipOnboarding();
+	UFUNCTION( exec, CheatBoard, category = "Research" )
+	void SkipOnboarding();
+	UFUNCTION( Server, Reliable )
+	void Server_GoToNextOnboardingStep();
+	UFUNCTION( exec, CheatBoard, category = "Research" )
+	void GoToNextOnboardingStep();
 	UFUNCTION( Server, Reliable )
 	void Server_ResetSchematics();
 	UFUNCTION( exec, CheatBoard, category = "Research" )
@@ -290,7 +524,35 @@ public:
 	void Server_SetTradingPostLevel( int32 inLevel );
 	UFUNCTION( exec, CheatBoard, category = "Research" )
 	void SetTradingPostLevel( int32 inLevel );
-
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockSpecificRecipe( TSubclassOf<class UFGRecipe> recipe );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockSpecificRecipe( TSubclassOf<class UFGRecipe> recipe );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockSpecificEmote( TSubclassOf<class UFGEmote> emote );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockSpecificEmote( TSubclassOf<class UFGEmote> emote );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockSpecificTape( TSubclassOf<class UFGTapeData> tapeData );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockSpecificTape( TSubclassOf<class UFGTapeData> tapeData );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockScannableResource( TSubclassOf< class UFGResourceDescriptor > resourceDescriptor );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockScannableResource( TSubclassOf< class UFGResourceDescriptor > resourceDescriptor );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockInventorySlots( int32 numSlots );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockInventorySlots( int32 numSlots );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockArmSlots( int32 numSlots );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockArmSlots( int32 numSlots );
+	UFUNCTION( Exec, CheatBoard, Category = "Research" )
+	void UnlockSpecificSchematic( TSubclassOf<UFGSchematic> Schematic );
+	UFUNCTION( Server, Reliable )
+	void Server_UnlockSpecificSchematic( TSubclassOf<UFGSchematic> Schematic );
+	
 	/****************************************************************
 	 * Map
 	 ****************************************************************/
@@ -309,26 +571,6 @@ public:
 	UFUNCTION( exec, CheatBoard, category = "Map" )
 	void Map_Hide();
 	
-	/****************************************************************
-	 * Story
-	 ****************************************************************/
-	// @todok2 implement client support when we now what to do with story
-	// Removed cheatboard tag for now so we don't have them on the cheat board
-	UFUNCTION( exec, category = "Story" )
-	void Story_TriggerNextPrimaryMessageInQueue();
-	UFUNCTION( exec, category = "Story" )
-	void Story_TriggerNextSecondaryMessageInQueue( int32 storyQueueIndex = 0 );
-	UFUNCTION( exec, category = "Story" )
-	void Story_TriggerNextFloatingMessageInPrimaryQueue();
-	UFUNCTION( exec, category = "Story" )
-	void Story_TriggerRandomTriggeredBarksMessage();
-	UFUNCTION( exec, category = "Story" )
-	void Story_StartNextStoryQueue();
-	UFUNCTION( exec, category = "Story" )
-	void Story_ResetAllStoryQueues();
-	UFUNCTION( exec, category = "Story" )
-	void Story_ResetCurrentStoryQueue();
-
 	/****************************************************************
 	 * Photo
 	 ****************************************************************/
@@ -355,23 +597,7 @@ public:
 	 * Online
 	 ****************************************************************/
 	UFUNCTION( exec, category = "Online" )
-	void Online_EpicLogin( FString username, FString password );
-	UFUNCTION( exec, category = "Online" )
-	void Online_EpicLogout();
-	UFUNCTION( exec, category = "Online" )
-	void Online_GetOnlineStatus( int32 localPlayerNum = 0 );
-	UFUNCTION( exec, category = "Online" )
-	void Online_UpdatePresence( FString key, FString value );
-	UFUNCTION( exec, category = "Online" )
-	void Online_UpdatePresenceString( FString string );
-	UFUNCTION( exec, category = "Online" )
-	void Online_LogPresence();
-	UFUNCTION( exec, category = "Online" )
-	void Online_GetFriends();
-	UFUNCTION( exec, category = "Online" )
 	void Online_TriggerPresenceUpdate();
-	UFUNCTION( exec, category = "Online" )
-	void Online_SendInviteToFriend( FString friendName );
 	UFUNCTION( exec, category = "Online" )
 	void Online_UpdateGameSession();
 	UFUNCTION( exec, category = "Online" )
@@ -399,7 +625,11 @@ public:
 	 * Trains
 	 ****************************************************************/
 	UFUNCTION( exec, category = "Trains" )
-	void Trains_ToggleSelfDriving();
+	void Trains_EnableSelfDriving( bool requireValidTimeTable );
+	UFUNCTION( exec, category = "Trains" )
+	void Trains_EnableSelfDrivingForTestCase( FString trainNameTag );
+	UFUNCTION( exec, category = "Trains" )
+	void Trains_DisableSelfDriving();
 	UFUNCTION( Server, Reliable )
 	void Server_Trains_FillAllFreightCars( float pct = 1.f );
 	UFUNCTION( exec, category = "Trains" )
@@ -488,6 +718,12 @@ public:
 	void Circuit_Bug_InsertDupeComponentIntoAnotherCircuit( int32 source, int32 target );
 
 	/****************************************************************
+	 * Narrative/Story
+	 ****************************************************************/
+	UFUNCTION( exec, CheatBoard, category = "Narrative" )
+	void ClearMessageCooldown();
+
+	/****************************************************************
 	 * Save/Load (Mostly commands to cleanup or fix save issues)
 	 ****************************************************************/
 	UFUNCTION( Server, Reliable )
@@ -506,23 +742,19 @@ public:
 	void Server_PurgeAllTrainState();
 	UFUNCTION( exec, category = "Save/Load" )
 	void PurgeAllTrainState();
-	UFUNCTION( exec, category = "Save/Load" )
-	void ResetAllFactoryLegsToZero( bool repopulateEmptyLegs );
-	UFUNCTION( exec, category = "Save/Load" )
-	void RebuildFactoryLegsOneTileAroundPlayer();
 	
 	/****************************************************************
 	 * Factory Debug
 	 ****************************************************************/
 	UFUNCTION( Server, Reliable )
 	void Server_ShowFactoryOnly( bool environmentHidden );
-	UFUNCTION( exec, category = "Factory" )
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
 	void ShowFactoryOnly( bool environmentHidden );
 	UFUNCTION( exec )
 	bool ShowFactoryOnly_Get();
 	UFUNCTION( Server, Reliable )
 	void Server_HideFactoryOnly( bool factoryHidden );
-	UFUNCTION( exec, category = "Factory" )
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
 	void HideFactoryOnly( bool factoryHidden );
 	UFUNCTION( exec )
 	bool HideFactoryOnly_Get();
@@ -530,34 +762,32 @@ public:
 	void SplitAllConveyors();
 	UFUNCTION( exec, category = "Factory" )
 	void MergeAllConveyors();
-	UFUNCTION( exec, category = "Factory" )
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
 	void SetFactoryDetailReplication( bool enable );
 	UFUNCTION( exec )
 	bool SetFactoryDetailReplication_Get();
 	UFUNCTION( Server, Reliable )
 	void Server_HideAllBuildings( bool inVisibility );
-	UFUNCTION( exec, category = "Factory" )
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
 	void HideAllBuildings( bool inVisibility );
 	UFUNCTION( exec )
-	bool HideAllBuildings_Get();
+	bool HideAllBuildings_Get() const;
 	UFUNCTION( Server, Reliable )
 	void Server_EnableBuildableTick( bool enable );
-	UFUNCTION( exec, category = "Factory" )
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
 	void EnableBuildableTick( bool enable );
 	UFUNCTION( exec )
 	bool EnableBuildableTick_Get();
-	UFUNCTION( exec, category = "Factory" )
-	void ReplayBuildingEffects();
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
+	void ReplayBuildingEffects( int32 bucketId, bool playBuildEffect = true );
+	UFUNCTION( exec, CheatBoard, category = "Factory" )
+	void SetBuildingBucketHidden( int32 bucketId, bool hidden );
 
 	/****************************************************************
 	 * Dump
 	 ****************************************************************/
 	UFUNCTION( exec, CheatBoard ,category = "Log" )
 	void DumpNonDormantActors();
-	UFUNCTION( exec, CheatBoard, category = "Log" )
-	void DumpAttachedToSkelMesh( bool detailed = false );
-	UFUNCTION( exec, CheatBoard, category = "Log" )
-	void DumpTicking( bool detailed = false );
 	UFUNCTION( exec, CheatBoard, category = "Log" )
 	void DumpActiveGPUParticles();
 	UFUNCTION( exec, CheatBoard, category = "Log" )
@@ -571,8 +801,6 @@ public:
 	UFUNCTION( exec, CheatBoard, category = "Log" )
 	void DumpItemPickups();
 	UFUNCTION( exec, CheatBoard, category = "Log" )
-	void DumpStaticMeshesHierarchy();
-	UFUNCTION( exec, CheatBoard, category = "Log" )
 	void DumpComponentCounts();
 	UFUNCTION( exec, CheatBoard, category = "Log" )
 	void DumpSchematics();
@@ -582,12 +810,12 @@ public:
 	void DumpAllAvailableRecipes();
 	UFUNCTION( exec, CheatBoard, category = "Log" )
 	void DumpGamePhases();
+	UFUNCTION( Exec, CheatBoard, Category = "Log" )
+	void DumpPlayerCustomizationData();
 
 	/****************************************************************
 	 * Audio
 	 ****************************************************************/
-	UFUNCTION( exec, CheatBoard, category = "Audio" )
-	void Audio_EnableDebug(bool isEnabled);
 	UFUNCTION( exec, CheatBoard, category = "Audio" )
 	void Audio_ToggleLandingDebug();
 	
@@ -597,12 +825,19 @@ public:
 	UFUNCTION( exec )
 	void RunHardwareBenchmark( int32 WorkScale = 10, float CPUMultiplier = 1.0f, float GPUMultiplier = 1.0f );
 	UFUNCTION( exec )
-	void TestSharedInventoryPtr();
-	UFUNCTION( exec )
 	void RandomizeBuildingsColorSlot( uint8 slotIndex = 0);
 	UFUNCTION( exec )
 	void ShowSequenceList();
+	UFUNCTION( exec )
+	void HitchNow( float ms );
 
+	/** Global parameter filters for a few types */
+	UFUNCTION( CheatBoard )
+	FFGCheatBoardGlobalParameterFilter GlobalParameterFilter_ItemDescriptor() const;
+	UFUNCTION( CheatBoard )
+	FFGCheatBoardGlobalParameterFilter GlobalParameterFilter_GameplayTest() const;
+	UFUNCTION( CheatBoard )
+	FFGCheatBoardGlobalParameterFilter GlobalParameterFilter_GamePhase() const;
 private:
 	// Traverse all UFGCheatManager cheat functions and store a mapping so we know what category they belong to since that data isn't available in packaged builds
 	void CacheFunctionCategoryMapping();
@@ -616,9 +851,13 @@ private:
 	class IFGFluidIntegrantInterface* GetOuterPlayerAimedAtFluidInterface() const;
 	
 public:
-	/** This is used to make picking the same classes in the cheat board easier */
+	/** Last remembered values of filter and item name selected for the cheat board */
 	UPROPERTY( Config )
-	TArray< UClass* > mPopularUClassChoices;
+	TMap<TSoftObjectPtr<UFunction>, FCheatBoardFunctionSelectionData> mLastRememberedFunctionSelections;
+
+	/** Last remembered filter value on the cheat board */
+	UPROPERTY( Config )
+	FCheatBoardParamSelectionData mCheatBoardLastFilterValue;
 	
 	/**
 	 * Populated when we save the cheat manager BP. Used to gather metadata from cheat functions. We need to store them since meta data isn't available in packaged builds
@@ -629,4 +868,8 @@ public:
 
 	/** Used to check if we have applied the default cheats this game session. */ 
 	bool mDefaultCheatsApplied = false;
+
+	/** Tracks with item pickup classes we are tracking */ 
+	UPROPERTY( Transient )
+	TArray< TSubclassOf< class AActor > > mHighlightedActorClasses;
 };

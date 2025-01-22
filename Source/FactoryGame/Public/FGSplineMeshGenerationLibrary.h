@@ -2,12 +2,12 @@
 
 #pragma once
 
-#include "FactoryGame.h"
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
-#include "FGInstancedSplineMeshComponent.h"
+#include "InstancedSplineMeshComponent.h"
+#include "FactoryGame.h"
 #include "FGSplineMeshGenerationLibrary.generated.h"
 
 /**
@@ -66,20 +66,8 @@ public:
 		TArray< USplineMeshComponent* >& meshPool,
 		MeshConstructor meshConstructor );
 
-	/**
-	 * Given a spline, this creates an instanced spline mesh along the spline.
-	 *
-	 * For all parameters see BuildSplineMeshes.
-	 *
-	 * @param splineInstances    The instance component to fill up with spline instances.
-	 *                           This can be reused between calls to update an existing one.
-	 *                           If this have mobility Static, it must not be registered before calling this function, if it is then this function have no effect.
-	 */
-	static void BuildSplineMeshesInstanced(
-		class USplineComponent* spline,
-		UStaticMesh* mesh,
-		float meshLength,
-		UFGInstancedSplineMeshComponent* splineInstances );
+	static void BuildNaniteSplineMeshes(USplineComponent* spline,UStaticMesh* Mesh, float meshLength, TArray<USplineMeshComponent*>& outMeshes);
+	static void BuildSplineMeshesInstanced(USplineComponent* spline, float meshLength, class UInstancedSplineMeshComponent* splineInstances);
 
 	/**
 	 * Given a spline, this creates an instanced spline mesh along the spline.
@@ -87,10 +75,10 @@ public:
 	 * For all parameters see BuildSplineMeshesInstanced.
 	 */
 	static void BuildSplineMeshesPerSegmentInstanced(
-		class USplineComponent* spline,
+		USplineComponent* spline,
 		UStaticMesh* mesh,
 		float meshLength,
-		UFGInstancedSplineMeshComponent* splineInstances );
+	    UInstancedSplineMeshComponent* splineInstances );
 
 	/**
 	 * Given a spline, this creates collisions along the spline.
@@ -211,14 +199,12 @@ TArray< ComponentType* > UFGSplineMeshGenerationLibrary::BuildSplineCollisionBox
 	USceneComponent* attachTo = optionalRoot ? optionalRoot : spline;
 	EComponentMobility::Type mobility = optionalRoot ? optionalRoot->Mobility : spline->Mobility;
 	TArray< ComponentType* > generatedComopnents;
-	
-	//FVector lastDir = spline->GetDirectionAtSplinePoint( 0, optionalRoot ? ESplineCoordinateSpace::Local : ESplineCoordinateSpace::World );
+
 	FVector lastDir = spline->GetDirectionAtSplinePoint( 0, ESplineCoordinateSpace::World );
 	
 	while( true )
 	{
-		//FColor debugColor = Debug_GetColorForAnIndex( i );
-		bool hasMore = UFGSplineMeshGenerationLibrary::GetNextDistanceExceedingTolerance( spline, startPos, dist, collisionSpacing, 22.0f, endDist, endPos, length );
+		bool hasMore = GetNextDistanceExceedingTolerance( spline, startPos, dist, collisionSpacing, 22.0f, endDist, endPos, length );
 		FVector dir = ( endPos - startPos ) / length;
 		FVector centerPos = ( startPos + endPos ) * 0.5f;
 
@@ -228,13 +214,7 @@ TArray< ComponentType* > UFGSplineMeshGenerationLibrary::BuildSplineCollisionBox
 			centerPos -= dir * radDiff * 0.5f;
 			////@TODO:[DavalliusA:Wed/05-02-2020] ideally we should apply half this to us and half to next.. and front and back side need different compensation so we need to offset our center...  so for now just try to apply it on us only
 		}
-
-		//const float distance = ( float )i * collisionLength + collisionLength * 0.5f;
-		//const FVector newLocation = spline->GetLocationAtDistanceAlongSpline( distance, ESplineCoordinateSpace::World );
-
-		//FVector side = spline->GetRightVectorAtDistanceAlongSpline( ( dist + endDist ) * 0.5f, optionalRoot ? ESplineCoordinateSpace::Local : ESplineCoordinateSpace::World );
-		FVector side = spline->GetRightVectorAtDistanceAlongSpline( ( dist + endDist ) * 0.5f, ESplineCoordinateSpace::World );
-
+		
 		// When using an optional root we may be spawning onto an actor that already has splineCollision (blueprints can have many "actors" on a single root when making the hologram)
 		// In that case we don't want to assume a name so for simplicity (and since the names are temporary as its a hologram) just allow the engine to find a nice available name
 		FName name = optionalRoot ? NAME_None : FName(*FString::Printf( TEXT( "SplineCollision_%i" ), i ));
@@ -254,8 +234,14 @@ TArray< ComponentType* > UFGSplineMeshGenerationLibrary::BuildSplineCollisionBox
 		//newComponent->SetRelativeLocation( centerPos );
 		newComponent->AddRelativeLocation( collisionOffset );
 
-		FQuat q = FRotationMatrix::MakeFromXYUnsafe( dir, side ).ToQuat();
-		newComponent->SetWorldRotation( q );
+		// [ZolotukhinN:21/03/2024] Enforce the horizontal orientation on pipes to make them always walkable by the player, but do not do it if the pipes are close to being vertical
+		const float verticalDotProduct = FMath::Abs( FVector::DotProduct( dir, FVector::UpVector ) );
+
+		// 0.8 dot product ~= 37 degrees. So for angle with vertical axis that are smaller than 37 degrees, we do not enforce a horizontal orientation. We take absolute value because direction does not matter.
+		const bool bIsVertical = verticalDotProduct >= 0.8f;
+		const FQuat segmentRotation = bIsVertical ? FRotationMatrix::MakeFromX( dir ).ToQuat() : FRotationMatrix::MakeFromXZUnsafe( dir, FVector::UpVector ).ToQuat();
+
+		newComponent->SetWorldRotation( segmentRotation );
 		//newComponent->SetRelativeRotation( q );
 		newComponent->SetRelativeScale3D( FVector( 1.0f ) );
 

@@ -3,12 +3,15 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "Buildables/FGBuildable.h"
+#include "FGEquipment.h"
 #include "GameFramework/Actor.h"
 #include "Resources/FGItemDescriptor.h"
-#include "Equipment/FGEquipment.h"
-#include "Buildables/FGBuildable.h"
 #include "FGPortableMinerDispenser.generated.h"
 
+/**
+ * TODO: Refactor alongside FGGolfCartDispenser into an "AFGEquipment_ActorSpawner" base class.
+ */
 UCLASS()
 class FACTORYGAME_API AFGPortableMinerDispenser : public AFGEquipment
 {
@@ -16,39 +19,46 @@ class FACTORYGAME_API AFGPortableMinerDispenser : public AFGEquipment
 public:
 	AFGPortableMinerDispenser();
 
-	/** It's a tick! */
-	virtual void Tick( float DeltaSeconds ) override;
+	// Begin AActor interface
+	virtual void Tick(float DeltaSeconds) override;
+	// End AActor interface
 
-	void BeginPlay();
+	// Begin AFGEquipment interface
+	virtual void UnEquip() override;
+	// End AFGEquipment interface
 
-	void SetMaterial( class UMaterialInterface* material );
-
-	/** Called on the owner, client or server but not both. */
-	void OnPrimaryFirePressed();
-
-	/** Only the server handles the building. */
-	UFUNCTION( Server, Reliable, WithValidation )
-	void Server_PrimaryFire();
-
-	UFUNCTION( BlueprintImplementableEvent )
-	void SpawnPortableMiner( class AFGResourceNode* resourceNode );
 protected:
-	/** Add custom bindings for this equipment */
-	virtual void AddEquipmentActionBindings() override;
-public:
+	virtual void HandleDefaultEquipmentActionEvent( EDefaultEquipmentAction action, EDefaultEquipmentActionEvent actionEvent ) override;
+
+	bool TraceForPortableMinerPlacementLocation( FVector& out_Location ) const;
+	bool IsResourceNodeValid( const AFGResourceNode* resourceNode ) const;
+
+	/** Actually spawns the resource miner */
+	UFUNCTION( Server, Reliable )
+	void Server_SpawnPortableMiner( const FVector& location, AFGResourceNode* resourceNode );
+
+	/** Updates the hologram location locally and also sends a multicast to update it for everyone else */
+	void UpdateHologramLocation( const FVector& location, bool isValidPlacement, bool isVisible );
+	
+	UFUNCTION( Server, Unreliable )
+	void Server_UpdateHologramLocation( const FVector& location, bool isValidPlacement, bool isVisible );
+
+	UFUNCTION( NetMulticast, Unreliable )
+	void Multicast_UpdateHologramLocation( const FVector& location, bool isValidPlacement, bool isVisible );
+
+	/** Updates location of the hologram locally */
+	void Local_UpdateHologramLocation( const FVector& location, bool isValidPlacement, bool isVisible ) const;
+	
+protected:
+	/** Component used for visualizing the portable miner hologram */
+	UPROPERTY( EditAnywhere, Category = "Portable Miner" )
+	USkeletalMeshComponent* mHologramMeshComponent;
+
+	/** Class of the portable miner to spawn into the world */
+	UPROPERTY( EditDefaultsOnly, Category = "Portable Miner" )
+	TSubclassOf<class AFGPortableMiner> mPortableMinerClass;
+	
 	/** What form can the overlapping resources be in. */
-	UPROPERTY( EditDefaultsOnly )
+	UPROPERTY( EditDefaultsOnly, Category = "Portable Miner" )
 	TArray< EResourceForm > mAllowedResourceForms;
-
-	// Trace distance when building. * /
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Buildable" )
-	float mPlaceDistanceMax;
-
-	/** Material on hologram for valid placement. */
-	UPROPERTY()
-	class UMaterialInstance* mValidPlacementMaterial;
-
-	/** Material on hologram for invalid placement. */
-	UPROPERTY()
-	class UMaterialInstance* mInvalidPlacementMaterial;
 };

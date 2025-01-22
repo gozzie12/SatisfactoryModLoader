@@ -3,10 +3,10 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "CoreMinimal.h"
-#include "Hologram/HologramHelpers.h"
-#include "Hologram/FGSplineHologram.h"
 #include "Components/SplineComponent.h"
+#include "CoreMinimal.h"
+#include "FGSplineHologram.h"
+#include "HologramHelpers.h"
 #include "FGPipelineHologram.generated.h"
 
 /**
@@ -20,8 +20,8 @@ public:
 	AFGPipelineHologram();
 
 	// Begin AActor Interface
-	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	// End AActor Interface
 
 	// Begin AFGHologram Interface
@@ -31,35 +31,31 @@ public:
 	virtual int32 GetBaseCostMultiplier() const override;
 	virtual AActor* GetUpgradedActor() const override;
 	virtual void SpawnChildren( AActor* hologramOwner, FVector spawnLocation, APawn* hologramInstigator ) override;
-	virtual void GetSupportedScrollModes( TArray< EHologramScrollMode >* out_modes ) const override;
-	virtual void GetSupportedBuildModes_Implementation( TArray<TSubclassOf<UFGHologramBuildModeDescriptor>>& out_buildmodes ) const override;
+	virtual void GetSupportedBuildModes_Implementation( TArray<TSubclassOf<UFGBuildGunModeDescriptor>>& out_buildmodes ) const override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual void AdjustForGround( FVector& out_adjustedLocation, FRotator& out_adjustedRotation ) override;
-	virtual void PreHologramPlacement() override;
+	virtual void PreHologramPlacement( const FHitResult& hitResult ) override;
+	virtual void PostHologramPlacement( const FHitResult& hitResult ) override;
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void OnInvalidHitResult() override;
 	virtual void Scroll( int32 delta ) override;
-	virtual void OnPendingConstructionHologramCreated_Implementation( AFGHologram* fromHologram ) override;
 	virtual void SetSnapToGuideLines( bool isEnabled ) override;
 	virtual float GetHologramHoverHeight() const override;
 	virtual void GetIgnoredClearanceActors( TArray< AActor* >& ignoredActors ) const override;
 	virtual void CheckBlueprintCommingling() override;
+	virtual AFGHologram* GetNudgeHologramTarget() override;
+	virtual bool CanTakeNextBuildStep() const override;
+	virtual void ReplaceHologram( AFGHologram* hologram, bool snapTransform ) override;
 	// End AFGHologram Interface
 
-	// Begin FGConstructionMessageInterface
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	virtual void ClientPreConstructMessageSerialization() override;
-	virtual void ServerPostConstructMessageDeserialization() override;
-	// End FGConstructionMessageInterface
+	// Begin AFGBuildableHologram Interface
+	virtual TArray< class UFGPipeConnectionComponent* > GetRelevantPipeConnectionsForGuidelines() const override;
+	// End AFGBuildableHologram Interface
 
 	// Begin FGSplineHologram Interface
 	virtual void ResetBuildSteps() override;
 	virtual bool IsConnectionSnapped( bool lastConnection ) override;
 	// End FGSplineHologram Interface
-
-	/** Returns reference to spline point data */
-	void GetLastSplineData( FSplinePointData &data );
-
 protected:
 	// Begin AFGBuildableHologram Interface
 	virtual void ConfigureActor( class AFGBuildable* inBuildable ) const override;
@@ -68,27 +64,18 @@ protected:
 	virtual void CheckValidPlacement() override;
 	// End AFGBuildableHologram Interface
 
-	// Begin AFGHologram Interface
-	virtual void CheckClearance( const FVector& locationOffset ) override;
-	// End AFGHologram Interface
-
 	/** Creates the clearance detector used with Pipelines */
-	void SetupPipeClearanceDetector();
-
-	FORCEINLINE class AFGPipelineSupportHologram* GetChildPoleHologram() const { return mChildPoleHologram; }
-
+	virtual void OnRep_SplineData() override;
 private:
 	void RouteSelectedSplineMode( FVector startLocation, FVector startNormal, FVector endLocation, FVector endNormal );
 
 	/** Update the spline on the client. */
-	UFUNCTION()
-	void UpdateSplineComponent();
+	virtual void UpdateSplineComponent() override;
+
+	virtual void UpdateClearanceData() override;
 
 	float GetSplineLength();
-
 	void UpdateConnectionComponentsFromSplineData();
-
-	void UpdateSplineCompFromSplineData();
 
 	/**
 	* This routes the spline to the new location. Inserting bends and straights.
@@ -156,35 +143,31 @@ public:
 	static constexpr float MINIMUM_PIPE_CLEARANCE = FHologramPathingGrid::PATH_GRID_CELL_SIZE;
 	static constexpr float MINIMUM_HOLOGRAM_LENGTH = FHologramPathingGrid::PATH_GRID_CELL_SIZE * 2.f;
 
-
 private:
-
-
-
 	bool mUsingCutstomPoleRotation = false;
 
 	/**Used to redirect input and construct poles when needed*/
 	UPROPERTY( Replicated )
-	class AFGPipelineSupportHologram* mChildPoleHologram = nullptr;
+	class AFGPipelineSupportHologram* mChildPoleHologram[ 2 ];
 
 	/**Used to redirect input and construct wall poles when needed*/
 	UPROPERTY( Replicated )
-	class AFGWallAttachmentHologram* mChildWallPoleHologram = nullptr;
+	class AFGWallAttachmentHologram* mChildWallPoleHologram[ 2 ];
 
 	/** Connection component used for snapping with our child wall pole. */
 	UPROPERTY()
-	UFGPipeConnectionComponentBase* mChildWallPoleConnection = nullptr;
+	UFGPipeConnectionComponentBase* mChildWallPoleConnection[ 2 ];
 
 	/** The two connection components for this pipeline. */
 	UPROPERTY()
 	class UFGPipeConnectionComponentBase* mConnectionComponents[ 2 ];
 
 	/** The connections we've made. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	class UFGPipeConnectionComponentBase* mSnappedConnectionComponents[ 2 ];
 
 	/** If we upgrade another pipeline this is the pipeline we replace. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	class AFGBuildablePipeline* mUpgradedPipeline;
 	
 	/** Class of pipe pole to place at the end. */
@@ -215,12 +198,6 @@ private:
 	UPROPERTY()
 	class UStaticMeshComponent* mConnectionArrowComponent;
 
-	/** Struct for generating smart pathing between two connections */
-	struct FHologramPathingGrid* mPathingGrid;
-
-	/** Is path finding possible with the given points? */
-	bool mCanPerformPathing;
-
 	/** All the generated spline meshes. */
 	UPROPERTY()
 	TArray< class USplineMeshComponent* > mSplineMeshes;
@@ -241,19 +218,24 @@ private:
 	UPROPERTY( EditDefaultsOnly, Category = "Hologram|BuildMode")
 	TSubclassOf< class UFGHologramBuildModeDescriptor > mBuildModeHorzToVert;
 
-	// Forced direction resulting from a snap to a passthrough
-	FVector mForcedNormalDirection;
-
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	TArray< class AFGBuildablePassthrough* > mSnappedPassthroughs;
 
 	UPROPERTY()
 	FVector mPassthroughOverrideStartLocation;
 
+	UPROPERTY()
+	FVector mPassthroughSnapDirection;
+
 	/** Cached from the default buildable. */
 	UPROPERTY()
 	class UStaticMesh* mMesh;
+	
+	UPROPERTY()
+	class UMaterialInterface* mMeshMaterial;
+	
 	float mMeshLength;
 
-	bool mPoleSnappedToActor = false;
+	TSubclassOf< UFGBuildGunModeDescriptor > mPrevBuildGunMode;
+	FVector mCachedSnapNormal;
 };

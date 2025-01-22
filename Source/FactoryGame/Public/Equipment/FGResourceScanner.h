@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "FGEquipment.h"
 #include "Resources/FGResourceNodeBase.h"
-#include "Equipment/FGEquipment.h"
 #include "FGResourceScanner.generated.h"
 
 /** Holds information about resource node clusters. This could be saved in actors on the level for optimization. */
@@ -53,11 +53,6 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick( float dt ) override;
-	virtual bool ShouldSaveState() const;
-
-	/** The function that play effects, sound and particle, in the world at the found node */
-	UFUNCTION( BlueprintImplementableEvent, Category = "Resource Scanner" )
-	void PlayClusterEffects( const TArray< FNodeClusterData >& clusters );
 
 	/** Create resource node representations for the given cluster */
 	UFUNCTION( BlueprintCallable, Category = "Resource Scanner" )
@@ -65,7 +60,7 @@ public:
 
 	/** Show the resource descriptor selection UI */
 	UFUNCTION( BlueprintImplementableEvent, Category = "Resource Scanner" )
-	void ShowResourceDescriptorSelectUI();
+	bool ShowResourceDescriptorSelectUI();
 
 	/** Close the resource descriptor selection UI */
 	UFUNCTION( BlueprintCallable, BlueprintImplementableEvent, Category = "Resource Scanner" )
@@ -91,9 +86,20 @@ public:
 	void SetPressingScan( bool isPressingScan ) { mIsPressingScan = isPressingScan; }
 	
 protected:
+	/** The function that play effects, sound and particle, in the world at the found node */
+	UFUNCTION( BlueprintImplementableEvent, Category = "Resource Scanner" )
+	void PlayClusterEffects( const TArray< FNodeClusterData >& clusters );
+
+	/** Plays the scan released effect. Will be played on all clients. */
+	UFUNCTION( BlueprintImplementableEvent, Category = "Resource Scanner" )
+	void PlayScanReleasedEffect();
+	
 	/** server notified of when a scanning was made */
-	UFUNCTION( Reliable, Server, WithValidation )
+	UFUNCTION( Server, Reliable )
 	void Server_ScanReleased();
+
+	UFUNCTION( NetMulticast, Unreliable )
+	void Multicast_ScanReleased();
 
 	/** Scan button released */
 	void ScanReleased();
@@ -113,6 +119,9 @@ protected:
 	void GetClosetClusters( TArray<FNodeClusterData>& closestClusters );
 
 	void SplitNearbyClusters( TArray< FNodeClusterData >& clusters );
+
+	/** Input Actions */
+	void Input_Scan( const FInputActionValue& actionValue );
 
 protected:
 	/** This is the resource class to scan for */
@@ -153,9 +162,4 @@ protected:
 	/** A list of all the clusters of nodes non the level */
 	UPROPERTY()
 	TArray< FNodeClusterData > mNodeClusters;
-
-private:
-
-	// Temp fix for avoiding scanning when opening CheatBoard, function is bound to CheatBoard input
-	void OnCheatBoardOpened();
 };

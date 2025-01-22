@@ -4,8 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildableFactory.h"
-#include "Buildables/FGBuildableRailroadTrack.h"
+#include "FGBuildableFactory.h"
+#include "FGBuildableRailroadTrack.h"
 #include "FGBuildableTrainPlatform.generated.h"
 
 
@@ -44,8 +44,9 @@ public:
 
 	// Begin IFGDismantlableInterface
 	virtual bool CanDismantle_Implementation() const override;
+	virtual void GetChildDismantleActors_Implementation(TArray<AActor*>& out_ChildDismantleActors) const override;
 	virtual void Dismantle_Implementation() override;
-	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund ) const override;
+	virtual bool SupportsDismantleDisqualifiers_Implementation() const override { return true; }
 	// End IFGDismantlableInterface
 
 	//~ Begin IFGUseableInterface
@@ -56,11 +57,12 @@ public:
 	FRailroadTrackPosition GetTrackPosition() const;
 	int32 GetTrackGraphID() const;
 
-	/** Get the platform that precedes this platform
-	*	@param direction - 0 or 1 
-	*	@info this can be null if the platform in the specified direction does not exist
-	*/
-	AFGBuildableTrainPlatform* GetConnectedPlatformInDirectionOf( uint8 direction );
+	/**
+	 * Get the connection that is in the opposite direction of the given connection
+	 * @param sourceConnection the connection on THIS platform that we are trying to get the opposite of
+	 * @return the connection on this station that is the opposite of the provided connection
+	 */
+	class UFGTrainPlatformConnection* GetConnectionInOppositeDirection( const class UFGTrainPlatformConnection* sourceConnection );
 
 	/** When a locomotive docks it will call this on relevant children in the direction of its output. It is up to the platform to decide how to act */
 	virtual void NotifyTrainDocked( class AFGRailroadVehicle* railroadVehicle, class AFGBuildableRailroadStation* initiatedByStation );
@@ -90,17 +92,18 @@ protected:
 	/** Call to clear all docking related properties, overrides should always call super */
 	virtual void FinishDockingSequence();
 
-	/** Update the docking status of Clients */
+	UFUNCTION()
+	virtual void OnRep_RailroadTrack();
 	UFUNCTION()
 	virtual void OnRep_UpdateDockingStatus();
+	UFUNCTION()
+	virtual void OnRep_DockedRailroadVehicle();
 
 private:
-	/** Used by the hologram to configure this platform. */
-	void ReverseConnectionDirections();
 	void AssignRailroadTrack( class AFGBuildableRailroadTrack* track );
 
 protected:
-	UPROPERTY( SaveGame )
+	UPROPERTY( SaveGame, ReplicatedUsing = OnRep_RailroadTrack )
 	class AFGBuildableRailroadTrack* mRailroadTrack;
 
 	/** Each platform should have exactly 2 FGTrainPlatformConnectionComponents (Not a uproperty as it just holds refs to the below connections)
@@ -116,7 +119,7 @@ protected:
 	UPROPERTY( EditAnywhere )
 	class UFGTrainPlatformConnection* mPlatformConnection1;
 
-	UPROPERTY( Replicated, SaveGame )
+	UPROPERTY( ReplicatedUsing = OnRep_DockedRailroadVehicle, SaveGame )
 	class AFGRailroadVehicle* mDockedRailroadVehicle;
 
 	/** Stores a reference to the station that initiated a docking sequence. Used to notify the station that we have completed */

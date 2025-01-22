@@ -5,12 +5,11 @@
 bool FScannableObjectData::operator ==(const FScannableObjectData& other) const{ return bool(); }
 bool FScannableObjectData::operator !=(const FScannableObjectData& other) const{ return bool(); }
 bool FScannableDetails::HasRequiredSchematic() const{ return bool(); }
+FScannableActorDetails::FScannableActorDetails(AActor* actor){ }
+FScannableActorDetails::FScannableActorDetails(const struct FWorldScannableData& scannableData) { }
+FVector FScannableActorDetails::GetActorLocation() const { return FVector(); }
 TSubclassOf< class UFGSchematic > FScannableDetails::GetRequiredSchematic() const{ return TSubclassOf<class UFGSchematic>(); }
-void UFGScannableDetails::ScanForObjects(const FVector2D scanLocation, const float scanRadius, TArray<FScannedActor>& out_ScannedObjects){ }
-void UFGScannableDetails::ScanForObjects(const FVector2D scanLocation, const float scanRadius, TMap<TSubclassOf<AActor>, int32>& out_foundActorCount){ }
-TSubclassOf<AActor> UFGScannableDetails::GetActorClassToScanFor(){ return TSubclassOf<AActor>(); }
-bool UFGScannableDetails::CacheScannedActors() const{ return bool(); }
-AActor* UFGScannableDetails::FindClosestRelevantActor( UWorld* world, const FVector scanLocation, const float maxRangeSquare, TSubclassOf<AActor> actorClassToScanFor) const{ return nullptr; }
-AActor* UFGScannableDetailsHostileCreature::FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return nullptr; }
-AActor* UFGScannableDetailsRegrowingPickups::FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return nullptr; }
-AActor* UFGScannableDetailsHarddrive::FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return nullptr; }
+FScannableActorDetails UFGScannableDetails::FindClosestRelevantActor( UWorld* world, const FVector& scanLocation, const float maxRangeSquare, TSubclassOf<AActor> actorClassToScanFor) const{ return FScannableActorDetails(); }
+FScannableActorDetails UFGScannableDetailsHostileCreature::FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return FScannableActorDetails(); }
+FScannableActorDetails UFGScannableDetailsRegrowingPickups::FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return FScannableActorDetails(); }
+FScannableActorDetails UFGScannableDetailsHarddrive::FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const{ return FScannableActorDetails(); }

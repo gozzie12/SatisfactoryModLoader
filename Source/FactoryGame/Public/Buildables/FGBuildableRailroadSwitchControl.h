@@ -3,7 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableFactory.h"
+#include "FGBuildableFactory.h"
 #include "FGUseableInterface.h"
 #include "FGBuildableRailroadSwitchControl.generated.h"
 
@@ -25,7 +25,7 @@ public:
  * A component for controlling a switch's position.
  */
 UCLASS( Blueprintable )
-class FACTORYGAME_API AFGBuildableRailroadSwitchControl : public AFGBuildableFactory //@todo Why is this a factory.
+class FACTORYGAME_API AFGBuildableRailroadSwitchControl : public AFGBuildable, public IFGSignificanceInterface
 {
 	GENERATED_BODY()
 public:
@@ -34,24 +34,36 @@ public:
 	// Begin AActor interface
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 	virtual void BeginPlay() override;
-	virtual void Destroyed() override;
+	virtual void EndPlay( const EEndPlayReason::Type endPlayReason ) override;
 	// End AActor interface
 
 	// Begin FGBuildable
 	virtual void OnBuildEffectFinished() override;
+	virtual void OnBuildEffectActorFinished() override;
 	// End FGBuildable
 
+	//Begin IFGSignificanceInterface
+	virtual void GainedSignificance_Implementation() override;
+	virtual	void LostSignificance_Implementation() override;
+	virtual float GetSignificanceRange() override { return mSignificanceRange; }
+	virtual void GainedSignificance_Native() override;
+	virtual void LostSignificance_Native() override;
+	virtual	void SetupForSignificance() override;
+	//End IFGSignificanceInterface
+	
 	// Begin IFGDismantleInterface
+	virtual bool ShouldBlockDismantleSample_Implementation() const override;
 	virtual bool CanDismantle_Implementation() const override;
 	// End IFGDismantleInterface
 
 	//~ Begin AFGBuildable interface
 	virtual bool CanBeSampled_Implementation() const{ return false; }
 	virtual bool ShouldBeConsideredForBase_Implementation() override { return false; }
+	virtual void Dismantle_Implementation() override;
 	//~ End AFGBuildable interface
 
 	// Begin IFGUseableInterface
-	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) const override;
+	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) override;
 	virtual void OnUse_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual void OnUseStop_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual bool IsUseable_Implementation() const override;
@@ -75,6 +87,10 @@ public:
 	UFUNCTION()
 	void OnSwitchPositionChanged( int32 newPosition, int32 numPositions );
 
+	/** @return If this is significant. */
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Railroad|Signal" )
+	bool IsSignificant() const { return mIsSignificant; }
+	
 	/**
 	 * Sets the controlled connection when this switch is constructed.
 	 * Note that the track the controlled connection belongs to and its connected components track must have had its begin play called.
@@ -83,6 +99,9 @@ public:
 	void SetControlledConnection( class UFGRailroadTrackConnectionComponent* controlledConnection );
 
 protected:
+	UFUNCTION()
+	void OnRep_ControlledConnection();
+	
 	UFUNCTION()
 	void OnRep_VisualState();
 
@@ -98,7 +117,7 @@ protected:
 	
 private:
 	/** Connection we control, might become null if the track is removed but not the control (mods and save game editing). */
-	UPROPERTY( SaveGame, Replicated )
+	UPROPERTY( SaveGame, ReplicatedUsing = OnRep_ControlledConnection )
 	class UFGRailroadTrackConnectionComponent* mControlledConnection;
 
 	/** Current switch position read from the controlled connection. */
@@ -108,4 +127,11 @@ private:
 	/** Stored custom data for the switch material. */
 	UPROPERTY( ReplicatedUsing = OnRep_VisualState )
 	int16 mVisualState;
+
+	/** Indicates if the factory is within significance distance */
+	bool mIsSignificant;
+
+	/** The range to keep the buildable in significance */
+	UPROPERTY( EditDefaultsOnly, Category = "Significance" )
+	float mSignificanceRange;
 };

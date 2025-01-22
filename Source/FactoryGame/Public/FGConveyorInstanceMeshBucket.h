@@ -4,74 +4,25 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "Engine/InstancedStaticMesh.h"
+#include "StaticMeshResources.h"
+#include "RenderTransform.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "FGConveyorInstanceMeshBucket.generated.h"
 
-// 3x4 half float matrix to be used on the gpu, supports other types in case he platform doesn't support float16.
-template<typename T>
-struct FMatrixHalfFloat
+enum class UpdateCommand : uint8
 {
-public:
-	T m[3][4];
-	FMatrixHalfFloat(float Value[4][4])
-	{
-		m[0][0] = T(Value[0][0]);
-		m[0][1] = T(Value[0][1]);
-		m[0][2] = T(Value[0][2]);
-		m[0][3] = T(Value[0][3]);
-		
-		m[1][0] = T(Value[1][0]);
-		m[1][1] = T(Value[1][1]);
-		m[1][2] = T(Value[1][2]);
-		m[1][3] = T(Value[1][3]);
-
-		m[2][0] = T(Value[2][0]);
-		m[2][1] = T(Value[2][1]);
-		m[2][2] = T(Value[2][2]);
-		m[2][3] = T(Value[2][3]);
-	}
-
-	void Set(float Value[4][4])
-	{
-		m[0][0] = T(Value[0][0]);
-		m[0][1] = T(Value[0][1]);
-		m[0][2] = T(Value[0][2]);
-		m[0][3] = T(Value[0][3]);
-		
-		m[1][0] = T(Value[1][0]);
-		m[1][1] = T(Value[1][1]);
-		m[1][2] = T(Value[1][2]);
-		m[1][3] = T(Value[1][3]);
-		
-		m[2][0] = T(Value[2][0]);
-		m[2][1] = T(Value[2][1]);
-		m[2][2] = T(Value[2][2]);
-		m[2][3] = T(Value[2][3]);
-	}
-	
-	FMatrixHalfFloat()
-	{
-		Set( FTransform::Identity.ToMatrixNoScale().M);
-	}
+	UC_None,
+	UC_UploadToGPU,
+	UC_Hide
 };
 
-/**
- * 
- */
-struct FRawTransformData
+class FACTORYGAME_API FConveyorBucketSceneProxy : public FInstancedStaticMeshSceneProxy
 {
-	MS_ALIGN( 16 ) float M[4][4] GCC_ALIGN(16);
-	
-	FRawTransformData()
-	{
-		FMemory::Memzero((uint8*)M[0], 16*sizeof(float));
-	}
-	
-	// We bypass scale.
-	void operator=( float Other[4][4] )
-	{
-		FMemory::Memcpy( &M, Other,sizeof(float) * 16 );
-	}
+public:
+	FConveyorBucketSceneProxy(UInstancedStaticMeshComponent* InComponent, ERHIFeatureLevel::Type InFeatureLevel);
+
+	void UpdateInstanceData(const TArray<FRenderTransform>& CurrentFrame,const TArray<FRenderTransform>& PreviousFrame,int32 Offset, int32 Count);
 };
 
 UCLASS(ClassGroup = Rendering, meta = (BlueprintSpawnableComponent), Blueprintable)
@@ -82,38 +33,64 @@ class FACTORYGAME_API UFGConveyorInstanceMeshBucket : public UInstancedStaticMes
 	UFGConveyorInstanceMeshBucket();
 
 	virtual bool ShouldCreatePhysicsState() const override { return false; }
-	
+	virtual FPrimitiveSceneProxy* CreateStaticMeshSceneProxy(Nanite::FMaterialAudit& NaniteMaterials, bool bCreateNanite) override;
 public:
-	void Init();
+	void Init(int32 Count);
 	
 	UFUNCTION(BlueprintCallable)
-	void SetNumInstances(int32 Count) { mNumInstances = Count; }
+	void SetNumInstances(int32 Count)
+	{
+		mNumInstances = Count;
+	}
 
-	virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
+	FORCEINLINE void PrepareInstanceUpdateBuffer( int32 Count )
+	{
+		{	// copy paste from epic's code, doesn't compile otherwise.
+			InstanceUpdateCmdBuffer.Cmds.Empty(Count);
+			InstanceUpdateCmdBuffer.NumCustomDataFloats = 0;
+			InstanceUpdateCmdBuffer.NumAdds = 0;
+			InstanceUpdateCmdBuffer.NumCustomFloatUpdates = 0;
+			InstanceUpdateCmdBuffer.NumRemoves = 0;
+		}
 	
+		InstanceUpdateCmdBuffer.Cmds.AddDefaulted(Count);
+		InstanceUpdateCmdBuffer.NumUpdates = Count;
+		InstanceUpdateCmdBuffer.NumEdits = Count;
+	}
+	
+	FORCEINLINE void UpdateInstanceData(const int32 Id, const FMatrix& M,const FMatrix& PrevM)
+	{
+		auto& Entry = InstanceUpdateCmdBuffer.Cmds.GetData()[Id];
+		Entry.InstanceIndex = Id;
+		FMemory::Memcpy(&Entry.XForm,&M,sizeof(FMatrix));
+		FMemory::Memcpy(&Entry.PreviousXForm,&PrevM,sizeof(FMatrix));
+		Entry.Type = FInstanceUpdateCmdBuffer::Update;
+	}
+	
+	UpdateCommand UpdateCommand = UpdateCommand::UC_None;
+	
+	void CheckNANs();
+	void SubmitToGPU(int32 StartID, int32 Count,const TArray<FRenderTransform>& CurrentPos,const TArray<FRenderTransform>& PrevPos);
+	
+	virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
 protected:
-	// We need dynamic locations & buffers since we update them really often.
-	virtual bool ShouldHaveDynamicTransformAndLocationBuffers() const override { return true; }
 	virtual bool ShouldIgnoreOcclusionChecks() const override { return true; }
 public:
 	UPROPERTY( EditDefaultsOnly )
 	int32 mNumInstances;
 
-//private:
-	/* Transient location buffer to avoid memory allocation. */
-	TArray<FVector4> mTransientPositionBuffer;
-
-	/* Transient transform buffer to avoid memory allocation. */
-	TArray<FMatrixHalfFloat<FFloat16>> mTransientTransformBuffer;
+	TArray<FMatrix> NewInstanceMatrices;
+	TArray<FMatrix> OldInstanceMatrices;
 	
-	/* Transient Transforms set by the conveyor renderer */
-	//TArray<FTransform> mTransientTransforms;
-
-	/* Transient Transforms set by the conveyor renderer */
-	TArray<FRawTransformData> mRawTransientTransforms;
+	/* Ids for instances, needed for update transforms*/
+	TArray<int32> mIds;
 
 	bool bIsInitialized;
+	
+	FStaticMeshInstanceData NewRenderData;
 
 	friend class AFGConveyorItemSubsystem;
 	friend class FParallelUpdateGPUDatadateTask;
+
+	bool bFirstRun = true;
 };

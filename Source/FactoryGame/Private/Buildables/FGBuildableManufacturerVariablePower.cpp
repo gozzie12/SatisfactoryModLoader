@@ -6,12 +6,14 @@ AFGBuildableManufacturerVariablePower::AFGBuildableManufacturerVariablePower() :
 	this->mEstimatedMininumPowerConsumption = 0.0;
 	this->mEstimatedMaximumPowerConsumption = 0.0;
 	this->mPowerConsumptionCurve = nullptr;
+	this->mPowerConsumption = 0.1;
 }
-void AFGBuildableManufacturerVariablePower::BeginPlay(){ }
+void AFGBuildableManufacturerVariablePower::BeginPlay(){ Super::BeginPlay(); }
 void AFGBuildableManufacturerVariablePower::Factory_StartProducing(){ }
 void AFGBuildableManufacturerVariablePower::Factory_TickProducing(float dt){ }
 void AFGBuildableManufacturerVariablePower::Factory_Tick(float dt){ }
 void AFGBuildableManufacturerVariablePower::OnRep_CurrentPotential(){ }
+void AFGBuildableManufacturerVariablePower::OnRep_CurrentProductionBoost(){ }
 void AFGBuildableManufacturerVariablePower::OnRep_IsProducing(){ }
 void AFGBuildableManufacturerVariablePower::OnRep_CurrentRecipe(){ }
 void AFGBuildableManufacturerVariablePower::UpdateVariablePowerConsumption(){ }

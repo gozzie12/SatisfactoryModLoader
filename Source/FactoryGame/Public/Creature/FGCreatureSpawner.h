@@ -4,7 +4,8 @@
 
 #include "FactoryGame.h"
 #include "GameFramework/Actor.h"
-#include "Creature/FGCreature.h"
+#include "FGCreature.h"
+#include "FGInventoryComponent.h"
 #include "FGSaveInterface.h"
 #include "FGCreatureSpawner.generated.h"
 
@@ -52,16 +53,20 @@ UCLASS()
 class FACTORYGAME_API AFGCreatureSpawner : public AActor, public IFGSaveInterface
 {
 	GENERATED_BODY()
-public:	
+public:
+	static const FName CreatureClassPropertyName;
+	
 	AFGCreatureSpawner();
 
 	// BEGIN AActor interface
 	virtual void BeginPlay() override;
 	virtual void EndPlay( const EEndPlayReason::Type endPlayReason ) override;
-	#if WITH_EDITOR
+	virtual void Tick(float DeltaSeconds) override;
+#if WITH_EDITOR
+	virtual void GetActorDescProperties(FPropertyPairsMap& PropertyPairsMap) const override;
 	/** Moved in the editor, on done, calculate spawn locations */
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-	#endif
+#endif
 	// END AActor interface
 
 	// Begin IFGSaveInterface
@@ -75,8 +80,24 @@ public:
 	// End IFSaveInterface
 
 	/** Get the creature that we will spawn */
-	UFUNCTION( BlueprintNativeEvent, Category = "Spawner ")
+	UFUNCTION( BlueprintPure, Category = "Spawner" )
 	TSubclassOf< class AFGCreature > GetCreatureToSpawn() const;
+
+	/** Gets the default creature class*/
+	UFUNCTION( BlueprintPure, Category = "Spawner" )
+	FORCEINLINE TSubclassOf< class AFGCreature > GetCreatureClass() const { return mCreatureClass; }
+
+	/** Gets the arachnid override creature class*/
+	UFUNCTION( BlueprintPure, Category = "Spawner" )
+	FORCEINLINE TSubclassOf< class AFGCreature > GetCreatureClassArachnidOverride() const { return mCreatureClassArachnidOverride; }
+
+	/** Gets the creatures that belong to this spawner. */
+	UFUNCTION( BlueprintPure, Category = "Spawner" )
+	TArray< AFGCreature* > GetCreatures() const;
+
+	/** Appends the creatures of this spawner to the specified array*/
+	UFUNCTION( BlueprintCallable, Category = "Spawner" )
+	TArray< AFGCreature* > AppendCreatures( TArray< AFGCreature* >& out_creatures );
 
 	FORCEINLINE float GetSpawnDistanceOverride() const { return mSpawnDistanceOverride; }
 	FORCEINLINE float GetDespawnDistanceOverride() const { return mDespawnDistanceOverride; }
@@ -102,12 +123,19 @@ public:
 	UFUNCTION( BlueprintPure, Category = "Spawning" )
 	int32 GetNumUnspawnedCreatures() const;
 
+	/** Gets the total amount of creatures this spawner can spawn. */
+	UFUNCTION( BlueprintPure, Category = "Spawning" )
+	int32 GetTotalNumCreatures() const;
+
 	/** Whether or not this spawner is ready to spawn creatures. */
 	UFUNCTION( BlueprintPure, Category = "Spawning" )
 	bool IsReadyToSpawn();
 
 	/**  Server only - Handles logic for creating creatures when the spawners becomes active */
 	void SpawnCreatures();
+
+	/** Server only - Finishes creature spawning and sets spawner as inactive. */
+	void StopSpawning();
 
 	/**  Server only - Handles logic for actually spawning a single creature */
 	void SpawnSingleCreature();
@@ -129,7 +157,7 @@ public:
 	virtual void CreatureDied( AActor* thisActor );
 
 	/** Populates the spawndata array. */
-	void PopulateSpawnData();
+	bool PopulateSpawnData();
 
 	/** The distance at which this spawner will activate */
 	UFUNCTION( BlueprintPure, Category = "Spawning" )
@@ -143,18 +171,12 @@ public:
 	UFUNCTION()
 	FORCEINLINE bool VisualizeSpawnDistance() const { return mVisualizeSpawnDistance; }
 
-	/** Update if this spawner is scannable. Checks if near base and if it has any alive untamed creatures */
-	void UpdateScannableState();
-
 	/** Try and recouple creatures that are in this instances mSpawnData but has no spawner set */
 	void TryRecoupleCreatureAndSpawner();
 
 #if !UE_BUILD_SHIPPING
 	void DrawDebugInformation( float duration );
 #endif
-	
-protected:
-	virtual void OnSpawningFinished();
 
 	/** Used to register the spawner as a navigation invoker to generate navmesh around it for the creature. */
 	void RegisterAsNavigationInvoker( bool shouldRegister );
@@ -174,20 +196,24 @@ protected:
 	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	TSubclassOf< class AFGCreature > mCreatureClass;
 
+	/** The creature to spawn in case arachnid creatures are disabled, and our normal creature is considered arachnid */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
+	TSubclassOf< class AFGCreature > mCreatureClassArachnidOverride;
+
 	/** The number of enemies to spawn, used offline */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	FInt32Interval mNumberOfCreatures;
 
 	/** Can creatures spawn during day? */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	bool mCanSpawnDuringDay;
 
 	/** Can creatures spawn during night? */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	bool mCanSpawnDuringNight;
 
 	/** Within what radius do you want to spawn the enemies (the won't go outside of this radius) */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	float mSpawnRadius;
 
 	/** Whether or not we are actively spawning. */
@@ -202,16 +228,20 @@ protected:
 	UPROPERTY( EditAnywhere, Category = "Spawning" )
 	TArray< class AFGSplinePath* > mSplines;
 
+	/** For creatures with attached items, the item we attach to the creature will get chosen from this list at random. */
+	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	TArray< FInventoryStack > mAttachedItemLootTable;
+
 	/** cached value to see if spawner is near a base */
 	UPROPERTY( SaveGame )
 	bool mCachedIsNearBase;
 
 	/** Used to override the spawn distance of the creature. */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	float mSpawnDistanceOverride;
 
 	/** Used to override the despawn distance of the creature. */
-	UPROPERTY( EditAnywhere, Category = "Spawning" )
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Spawning" )
 	float mDespawnDistanceOverride;
 	
 private:
@@ -231,19 +261,7 @@ public:
 	/** How many days should pass before creatures start to respawn ( -1 means never ) */
 	UPROPERTY( EditInstanceOnly, Category = "Spawning" )
 	int32 mRespawnTimeIndays;
-
-	/** Async overlap check is done and result is passed in here */
-	UFUNCTION()
-	void ReceiveOnTraceCompleted( const TArray< FOverlapResult > & Results );
-
-	/** Does an async overlap in order to find a nearby base. */
+	
+	/** Does a call to the proximity system. */
 	void TraceForNearbyBase();
-
-	/** Function bound to mOverlapDelegate */
-	void OnTraceCompleted( const FTraceHandle& Handle, FOverlapDatum& Data );
-
-	FTraceHandle LastTraceHandle;
-
-	/** Delegate fired when we're done with the async check for overlapping actors */
-	FOverlapDelegate mOverlapDelegate;
 };

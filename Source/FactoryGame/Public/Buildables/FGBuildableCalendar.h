@@ -4,8 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "FGBuildable.h"
 #include "FGCalendarRewards.h"
-#include "Buildables/FGBuildable.h"
 #include "FGEventSubsystem.h"
 #include "FGBuildableCalendar.generated.h"
 
@@ -21,9 +21,9 @@ struct FSlotIndextoRandomRewardMapping
 	{}
 	
 	UPROPERTY()
-	int32 SlotIndex;
+	int32 SlotIndex = 0;
 	UPROPERTY()
-	int32 RandomRewardIndex;
+	int32 RandomRewardIndex = 0;
 	
 };
 
@@ -45,14 +45,17 @@ public:
 	// End AActor interface
 
 	// Begin IFGDismantleInterface
-	virtual bool CanDismantle_Implementation() const override { return false; }
-	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund ) const override;
+	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund, bool noBuildCostEnabled ) const override;
 	// End IFGDismantleInterface
 
 	// Begin IFGSaveInterface
 	virtual bool ShouldSave_Implementation() const override { return false; }
 	// End IFGSaveInterface
-	
+
+	// Begin IFGUseableInterface
+	virtual void OnUse_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
+	// End IFGUseableInterface
+
 	/** Get the inventory for the christmas calendar. Each inventory slot represents one slot in the calendar */
 	UFUNCTION( BlueprintPure, Category = "Calendar" )
 	FORCEINLINE class UFGInventoryComponent* GetInventory() const { return mInventory; }
@@ -77,22 +80,22 @@ public:
     int32 GetNumberOfSlotsInCalendar() const { return mNumberOfSlotsInCalendar; }
 
 	UFUNCTION()
-	void OnInventoryItemRemoved( TSubclassOf< UFGItemDescriptor > itemClass, int32 numRemoved );
+	void OnInventoryItemRemoved( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numRemoved, UFGInventoryComponent* targetInventory );
 
 	void StoreDataToEventSubsystem();
 
 protected:
 	/** The inventory for the christmas calendar. Each slot is one slot in the calendar */
-	UPROPERTY( Replicated )
+	UPROPERTY( SaveGame )
 	class UFGInventoryComponent* mInventory;
 
+	/** True if we have populated the calendar inventory with the initial rewards */
+	UPROPERTY( SaveGame )
+	bool mPopulatedInitialInventory;
+	
 	/** How many slots it should be in the calendar */
 	UPROPERTY( EditDefaultsOnly, Category = "Calendar" )
 	int32 mNumberOfSlotsInCalendar;
-
-	/** The calendar rewards class we use to get rewards for slots in this calendar */
-	UPROPERTY( EditDefaultsOnly, Category = "Calendar" )
-	TSubclassOf< UFGCalendarRewards > mCalendarRewardsClass;
 
 	/** This maps an inventory index to a random reward index in the calendar reward class */
 	UPROPERTY()

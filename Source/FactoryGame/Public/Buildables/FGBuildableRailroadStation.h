@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableTrainPlatform.h"
 #include "FGActorRepresentationInterface.h"
+#include "FGBuildableTrainPlatform.h"
 #include "FGTrainDockingRules.h"
 #include "FGBuildableRailroadStation.generated.h"
 
@@ -31,6 +31,8 @@ public:
 
 	// Begin IFGDismantlableInterface
 	virtual bool CanDismantle_Implementation() const override;
+	virtual bool SupportsDismantleDisqualifiers_Implementation() const override { return true; }
+	virtual void GetDismantleDisqualifiers_Implementation(TArray<TSubclassOf<UFGConstructDisqualifier>>& out_dismantleDisqualifiers, const TArray<AActor*>& allSelectedActors) const override;
 	// End IFGDismantlableInterface
 
 	// Begin Factory_ interface
@@ -39,6 +41,7 @@ public:
 
 	// Begin AFGBuildableFactory interface
 	virtual bool CanProduce_Implementation() const override;
+	virtual EProductionStatus GetProductionIndicatorStatus() const override;
 	// End AFGBuildableFactory interface
 
 	/** Get the station identifier for this station. Shared between server, client and used in time tables. */
@@ -100,12 +103,19 @@ public:
 
 	/** Cancel the current dock. This will notify all platforms in the docked platform list */
 	virtual void CancelDockingSequence() override;
+	
+	UMaterialInterface* GetDefaultCompassMaterial() const
+	{
+		return mCompassMaterial;
+	}
 
 protected:
 	// Begin AFGBuildableTrainPlatform
 	virtual void SetupRailroadTrack() override;
 	// End AFGBuildableTrainPlatform
 
+	UFUNCTION()
+	void OnRep_StationIdentifier();
 private:
 	/** Tries to dock each vehicle in the train to a platform */
 	bool DockVehiclesToPlatforms( class AFGLocomotive* locomotive );
@@ -120,7 +130,7 @@ public:
 	
 	//@todo-trains private
 	/** Light weight representation about this station, the railroad subsystem is responsible for this. */
-	UPROPERTY( Replicated )
+	UPROPERTY( ReplicatedUsing = OnRep_StationIdentifier )
 	class AFGTrainStationIdentifier* mStationIdentifier;
 
 private:
@@ -144,4 +154,7 @@ private:
 
 	UPROPERTY( EditDefaultsOnly, Category = "Representation" )
 	class UTexture2D* mActorRepresentationTexture;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Representation")
+	UMaterialInterface* mCompassMaterial;
 };

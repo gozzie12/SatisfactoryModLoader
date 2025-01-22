@@ -2,7 +2,8 @@
 
 #include "Creature/FGCreatureMovementComponent.h"
 
-void UFGCreatureMovementComponent::BeginPlay(){ }
+void UFGCreatureMovementComponent::BeginPlay(){ Super::BeginPlay(); }
 void UFGCreatureMovementComponent::OnCharacterStuckInGeometry(const FHitResult* Hit){ }
 void UFGCreatureMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode){ }
 bool UFGCreatureMovementComponent::ResolvePenetrationImpl(const FVector& Adjustment, const FHitResult& Hit, const FQuat& NewRotation){ return bool(); }
+bool UFGCreatureMovementComponent::ShouldRemainVertical() const{ return bool(); }

@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "FGColoredInstanceMeshProxy.h"
 #include "FGSwatchGroup.h"
+#include "Net/UnrealNetwork.h"
 
 #if WITH_EDITOR
 void AFGBuildablePipelineSupport::OnConstruction(const FTransform& transform){ }
@@ -18,7 +19,6 @@ AFGBuildablePipelineSupport::AFGBuildablePipelineSupport() : Super() {
 	this->mUseStaticHeight = false;
 	this->mHologramClass = AFGBuildablePipelineSupport::StaticClass();
 	this->mSwatchGroup = UFGSwatchGroup_Pipeline::StaticClass();
-	this->mCreateClearanceMeshRepresentation = false;
 	this->mSupportComponentDefaultMesh->SetupAttachment(RootComponent);
 }
 void AFGBuildablePipelineSupport::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const {
@@ -27,7 +27,8 @@ void AFGBuildablePipelineSupport::GetLifetimeReplicatedProps(TArray< FLifetimePr
 	DOREPLIFETIME(AFGBuildablePipelineSupport, mVerticalAngle);
 	DOREPLIFETIME(AFGBuildablePipelineSupport, mSupportMesh);
 }
-void AFGBuildablePipelineSupport::BeginPlay(){ }
+void AFGBuildablePipelineSupport::BeginPlay(){ Super::BeginPlay(); }
+TArray<struct FInstanceData> AFGBuildablePipelineSupport::GetActorLightweightInstanceData_Implementation(){ return TArray<struct FInstanceData>(); }
 void AFGBuildablePipelineSupport::SetSupportLength(float length){ }
 void AFGBuildablePipelineSupport::SetVerticalAngle(float angle){ }
 void AFGBuildablePipelineSupport::SetupConnectionComponent(){ }

@@ -5,7 +5,7 @@
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
 
-#include "Creature/FGAction.h"
+#include "FGAction.h"
 
 #include "AI/FGCreatureController.h"
 
@@ -37,15 +37,15 @@ struct FACTORYGAME_API FCreatureActionTargetParams
 	
 	/** How the target of the action should be selected. */
 	UPROPERTY( EditAnywhere, BlueprintReadOnly )
-	ECreatureActionTargetSelectionType TargetType;
+	ECreatureActionTargetSelectionType TargetType = ECreatureActionTargetSelectionType::None;
 
 	/** What kind of visibility requirement we have in order for a target to be considered. */
 	UPROPERTY( EditAnywhere, BlueprintReadOnly )
-	ETargetVisibilityRequirement VisibilityRequirement;
+	ETargetVisibilityRequirement VisibilityRequirement = ETargetVisibilityRequirement::TVR_None;
 
 	/** The minimum amount of aggro a target needs to have in order to be considered. */
 	UPROPERTY( EditAnywhere, BlueprintReadOnly )
-	float MinimumAggro;
+	float MinimumAggro = 0.f;
 };
 
 /**

@@ -3,19 +3,26 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "FGSubsystem.h"
 #include "FGFactoryColoringTypes.h"
 #include "FGSaveInterface.h"
+#include "FGSubsystem.h"
 #include "FactoryTick.h"
+#include "Materials/MaterialInterface.h"
+#include "Math/GenericOctree.h"
 #include "FGBuildableSubsystem.generated.h"
 
+class AFGProjectAssembly;
 class UFGProductionIndicatorInstanceManager;
+class AFGBuildEffectActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnBuildableConstructedGlobal, AFGBuildable*, buildable );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnBuildableLightColorSlotsUpdated );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnColorChanged, int32, Index );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnOccluderBuildingConstructed, AFGBuildable*, buildable );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnOccluderBuildingRemoved, AFGBuildable*, buildable );
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnBuildableAdded, AFGBuildable*, buildable );
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnBuildableRemoved, AFGBuildable*, buildable );
 
 /** Used to track constructed (spawned) buildables matched with their holograms between client and server */
 USTRUCT()
@@ -57,10 +64,10 @@ struct FDistanceBasedTickRate
 	GENERATED_BODY()
 
 	UPROPERTY( EditDefaultsOnly, Category = "Factory" )
-	float Distance;
+	float Distance = 0.f;
 
 	UPROPERTY( EditDefaultsOnly, Category = "Factory" )
-	float TickRate;
+	float TickRate = 0.f;
 };
 
 USTRUCT()
@@ -76,14 +83,20 @@ struct FBuildableBucket
 };
 
 USTRUCT()
-struct FConveyorBucket
+struct FConveyorTickGroup
 {
 	GENERATED_BODY()
 
-	FConveyorBucket(){}
-
+	FConveyorTickGroup(){}
+	
+	UPROPERTY()
+	AFGBuildable* ForceIntoSharedByBuildable = nullptr; 
+	
 	UPROPERTY()
 	TArray< class AFGBuildableConveyorBase* > Conveyors;
+
+	UPROPERTY()
+	class AFGConveyorChainActor* ChainActor = nullptr;
 };
 
 USTRUCT()
@@ -109,6 +122,61 @@ enum class EPropagateColorState : uint8
 	SettingColorOnly,
 	Done
 };
+
+/**
+ * Struct used to hold active buckets for the Timelapse tool
+ * Should be editor-only but UE still does not support editor-only structs
+ */
+USTRUCT()
+struct FFGBuildableTimelapseBucket
+{
+	GENERATED_BODY()
+
+	/** ID of the bucket we are doing the timelapse for */
+	UPROPERTY( VisibleAnywhere, Category = "Timelapse" )
+	int32 TimelapseBucketId{0};
+
+	/** Accumulated amount of time since this timelapse started */
+	UPROPERTY( VisibleAnywhere, Category = "Timelapse" )
+	float TimelapseProgress{0.0f};
+
+	/** Buildables that are pending their construction */
+	UPROPERTY( VisibleAnywhere, Category = "Timelapse" )
+	TArray<AFGBuildable*> BuildablesPending;
+
+	/** Whenever the build effect should be played */
+	UPROPERTY( VisibleAnywhere, Category = "Timelapse" )
+	bool bPlayBuildEffect{false};
+};
+
+struct FBuildableOctreeSemantics
+{
+	// When a leaf gets more than this number of elements, it will split itself into a node with multiple child leaves
+	enum { MaxElementsPerLeaf = 16 };
+
+	// This is used for incremental updates.  When removing a polygon, larger values will cause leaves to be removed and collapsed into a parent node.
+	enum { MinInclusiveElementsPerNode = 7 };
+
+	// How deep the tree can go.
+	enum { MaxNodeDepth = 20 };
+
+	using FOctree = TOctree2<AFGBuildable*, FBuildableOctreeSemantics>;
+
+	typedef TInlineAllocator<MaxElementsPerLeaf> ElementAllocator;
+
+	static FBoxCenterAndExtent GetBoundingBox(const AFGBuildable* Element);
+	static bool AreElementsEqual(const AFGBuildable* A, const AFGBuildable* B);
+	static void SetElementId(FOctree& Octree, const AFGBuildable* Element, FOctreeElementId2 OctreeElementID);
+};
+
+struct FBuildableComponentsOctree : public TOctree2<AFGBuildable*, FBuildableOctreeSemantics>
+{
+	FBuildableComponentsOctree() = default;
+	FBuildableComponentsOctree(const FVector& InOrigin,FVector::FReal InExtent) : TOctree2(InOrigin, InExtent) {};
+
+	TMap<const AFGBuildable*, FOctreeElementId2> mElementIdMap;
+};
+
 
 /**
  * Subsystem responsible for spawning and maintaining buildables.
@@ -164,6 +232,19 @@ public:
 	 */
 	void OnDesignerBuildableSpawned( AFGBuildable* buildable );
 
+	/** Updates a conveyor bucket and all conveyors in it with their tick location (first, mid, last) */
+	void AssignConveyorTickOrder( int32 id );
+
+	/** Migrates a sequence of conveyor belts ie. ConveyorTickGroup to a ConveyorChainActor which will handle updates and replication itself */
+	void MigrateConveyorGroupToChainActor( FConveyorTickGroup* tickGroup );
+
+	/**
+	 *	Removes Conveyor Chain from a conveyorTickGroup. This happens when a chain is modified. We remove then do a full rebuild of that chain
+	 *	This could likely be done a little more elegantly by migrating and updating existing chains. However that has reaching implications for networking
+	 *	Simply put this method is by far the simplest and less likely to introduce issues (albeit less performant but this cost only incurs when dismantling/adding conveyors)
+	 */
+	void RemoveChainActorFromConveyorGroup( FConveyorTickGroup* tickGroup );
+	
 	/** Adds a conveyor to the conveyor buckets */
 	void AddConveyor( AFGBuildableConveyorBase* conveyor );
 	
@@ -173,21 +254,31 @@ public:
 	*/
 	class AFGBuildableConveyorBase* GetConnectedConveyorBelt( class UFGFactoryConnectionComponent* connection );
 
+	/** Adds a conveyor chain actor so clients can tick them */
+	void AddConveyorChainActor( class AFGConveyorChainActor* chainActor );
+	
+	/** Removes a chain actor and flags tick groups for rebuild */
+	void RemoveConveyorChainActor( class AFGConveyorChainActor* ChainActor );
+
 	/** Remove the buildable from the subsystem, this is called by the buildable when destroyed. */
 	void RemoveBuildable( class AFGBuildable* buildable );
 
 	/** Remove the conveyor from the subsystem */
 	void RemoveConveyor( AFGBuildableConveyorBase* conveyor );
 
+	/** Splits a conveyor bucket ( invalidating its chain actor ) This is called when a conveyor attachment is placed on a chain (but does not modify the belts via dismantle )*/
+	void SplitConveyorGroupFromAttachment(AFGBuildableConveyorBase* conveyor );
+
 	/**
 	 *	Remove a conveyor from the bucket it's assigned to
 	 *	If it's the only conveyor in the bucket the bucket will be removed
+	 *	@return returns true if it removed the bucket
 	 */
-	void RemoveConveyorFromBucket( AFGBuildableConveyorBase* conveyorToRemove );
+	bool RemoveConveyorFromBucket( AFGBuildableConveyorBase* conveyorToRemove );
 
-	/** Rearrange the conveyor buckets after we emptied a bucket */
+	/** Rearrange the conveyor buckets after we emptied a bucket. returns true if a memory swap occurs */
 	void RearrangeConveyorBuckets( int32 emptiedBucketID );
-
+	
 	/**
 	*	Splits up a conveyor bucket into two buckets
 	*	Empties the current bucket and adds all conveyors again into two buckets
@@ -197,6 +288,12 @@ public:
 	/** Returns true if this subsystem has been created on a server instance */
 	bool IsServerSubSystem() const;
 
+	/** @return a const reference to all buildables in the world. Avoids copying, but can be invalidated by buildables being added/removed */
+	FORCEINLINE const TArray<AFGBuildable*>& GetAllBuildablesRef() const { return mBuildables; }
+
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory" )
+	int32 GetBuildableCount( TSubclassOf< AFGBuildable > buildableClass ) const;
+
 	/** Get all buildables of the supplied type. */
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory" )
 	void GetTypedBuildable( TSubclassOf< class AFGBuildable > inClass, TArray< class AFGBuildable* >& out_buildables ) const;
@@ -204,13 +301,22 @@ public:
 	/** Get all buildables of the supplied type. */
 	template< typename T >
 	void GetTypedBuildable( TArray< T* >& out_buildables ) const;
-
+	
 	void GetOcclusionAffectingBuildebles(TArray<AFGBuildable*>& Out, const FVector& RequestLocation, float Range, bool bParallel = true) const;
 
+	void GetNearestBuildables(TArray<AFGBuildable*>& Out, const FVector& RequestLocation, float Range) const;
+	
+	/** Plays the timelapse effect on the buildables in the provided bucket. Only works in Editor. */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|Timelapse" )
+	void PlayTimelapseEffect( int32 bucketId, bool playBuildEffect = true );
 
-	/** Starts replaying of build effects in the build order of the buildings. */
-	UFUNCTION()
-	void ReplayBuildingEffects();
+	/**
+	 * Makes the buildables in the following timelapse bucket hidden or shown
+	 * Not safe to use when the timelapse is playing on the same bucket
+	 * Only works in Editor.
+	 */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|Timelapse" )
+	void SetTimelapseBucketHidden( int32 bucketId, bool hidden = true );
 
 	/** Getters for Color Slots - Now Data Structures */
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|Customization" )
@@ -226,7 +332,7 @@ public:
 
 	/** Getter for buildable light color slot for the given index */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Buildable|Light" )
-    FLinearColor GetBuildableLightColorSlot( int32 index ) const;
+	FLinearColor GetBuildableLightColorSlot( int32 index ) const;
     
 	/** Getter for all buildable light color slots */
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Buildable|Light", meta=(BlueprintPure = false) )
@@ -234,7 +340,7 @@ public:
 
 	/** Returns the number of colorable slots actually available to the the player  */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Buildable|Light" )
-    int32 GetNumBuildableLightColorSlots() const { return mBuildableLightColorSlots.Num(); }
+	int32 GetNumBuildableLightColorSlots() const { return mBuildableLightColorSlots.Num(); }
 
 	/** Called both on client and server when the buildable light color slots have been updated */
 	void BuildableLightColorSlotsUpdated( const TArray< FLinearColor >& colors );
@@ -248,7 +354,7 @@ public:
 	virtual void DisplayDebug( class UCanvas* canvas, const class FDebugDisplayInfo& debugDisplay, float& YL, float& YPos ) override;
 	void DebugGetFactoryActors( TArray< AActor* >& out_actors );
 
-	static FName GetMeshMapName( UStaticMesh* mesh, UMeshComponent* sourceComponent );
+	static FName GetMeshMapName( UStaticMesh* mesh, class UMeshComponent* sourceComponent );
 	
 	/** Returns the factory stat ID of the object used for the profiling tool. */
 	FORCEINLINE TStatId GetFactoryStatID( bool forDeferredUse = false ) const
@@ -266,12 +372,7 @@ public:
 #endif
 		return TStatId(); // not doing stats at the moment, or ever
 	}
-
-	UMaterial* GetFactoryDefaultMaterial()
-	{
-		return mDefaultFactoryMaterial;
-	}
-
+	
 	/** Generates a new NetConstructionID for buildables. Can be used from client to identify buildings that were constructed from server. */
 	FNetConstructionID GetNewNetConstructionID();
 
@@ -282,21 +383,20 @@ public:
 
 	void AddPendingConstructionHologram( FNetConstructionID netConstructionID, class AFGHologram* hologram );
 	void RemovePendingConstructionHologram( FNetConstructionID netConstructionID );
+	/** Lightweight buildables never exist on clients so the Lightweight subsystem manually tracks client construct Ids and then sends them here for removal */
+	void RemovePendingConstructionHologramForLightweight( uint16 clientId );
 
 	/** Preview Customization application on Buildable/Actor */
 	void ApplyCustomizationPreview( class IFGColorInterface* colorInterface, const FFactoryCustomizationData& previewData );
 
-	/** Clear a single customization preview */
+	/** Clear a single customization preview (apply back old data) */
 	void ClearCustomizationPreview( class IFGColorInterface* colorInterface );
 
+	/** Remove a customization preview and do not apply back the data */
+	void ClearCustomizationPreviewNoApply( class IFGColorInterface* colorInterface);
+	
 	/** Clear all previewed customizations in the cached buildable map */
 	void ClearAllCustomizationPreviews();
-
-	/** Remove a detail actor from pending list if it exists. Called when a buildable is interacted with */
-	void TryRemovePendingDetailActor( class AFGReplicationDetailActor* detailActor );
-	
-	/** When a buildable is no longer being interacted with its rep detail actor will be added to this list */
-	void AddPendingRemovalDetailActor( class AFGReplicationDetailActor* detailActor );
 	
 	static uint8 GetCurrentSubStepIteration()
 	{
@@ -332,7 +432,12 @@ private:
 	/** Create a stat for the buildable */
 	void CreateFactoryStatID() const;
 
-	void UpdateReplayEffects( float dt );
+#if WITH_EDITOR
+	TArray<AFGBuildable*> CollectBuildablesInTimelapseBucket( int32 bucketId ) const;
+	
+	/** Updates the currently active timelapse buckets */
+	void TickTimelapseTool( float dt );
+#endif
 
 	/** Internal helpers to setup a buildable that is registered. */
 	void AddToTickGroup( AFGBuildable* buildable );
@@ -357,6 +462,8 @@ private:
 	}
 		
 public:
+	static const FName MaterialParameter_ConveyorSpeed;
+	
 	/** Distance used when calculating if a location is near a base */
 	UPROPERTY( EditDefaultsOnly, Category = "Factory" )
 	float mDistanceConsideredClose;
@@ -368,6 +475,14 @@ public:
 	/** Broadcast when a buildable or decor has been constructed. Regardless of who built it */
 	UPROPERTY( BlueprintAssignable, Category = "Build", DisplayName = "OnBuildableConstructedGlobal" )
 	FOnBuildableConstructedGlobal BuildableConstructedGlobalDelegate;
+
+	/** Broadcast when a buildable is added to the buildable subsystem. */
+	UPROPERTY( BlueprintAssignable, Category = "Build", DisplayName = "OnBuildableAdded" )
+	FOnBuildableAdded mBuildableAddedDelegate;
+
+	/** Broadcast when a buildable is removed from the buildable subsystem. */
+	UPROPERTY( BlueprintAssignable, Category = "Build", DisplayName = "OnBuildableRemoved" )
+	FOnBuildableRemoved mBuildableRemovedDelegate;
 
 	/** Broadcast when buildable light color slots have been updated. Used to update UI */
 	UPROPERTY( BlueprintAssignable, Category = "Light Color" )
@@ -383,15 +498,17 @@ public:
 	UPROPERTY( BlueprintAssignable, Category = "Factory Color" )
 	FOnColorChanged mOnColorIndexChanged;
 	
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<AFGBuildEffectActor> mDefaultBuildEffect = nullptr;
+	
+	static void RequestBuildEffectActor( UObject* WorldContext, AFGBuildEffectActor*& BuildEffectActor, TSubclassOf< AFGBuildEffectActor > TemplateClass, FTransform Transform, AActor* instigator, bool bForceSolo = false );
+
+	TSubclassOf<AFGBuildEffectActor> GetDefaultBuildEffectTemplate() const { return mDefaultBuildEffect; }
+	
 	/**
 	 * Used by UFGColoredInstanceMeshProxy to get an instance if it's not already been assigned
 	 */
 	class UFGColoredInstanceManager* GetColoredInstanceManager( class UFGColoredInstanceMeshProxy* proxy );
-
-	/**
-	 * Used by UFGFactoryLegInstanceMeshProxy to get an instance if it's not already been assigned
-	 */
-	class UFGFactoryLegInstanceManager* GetFactoryLegInstanceManager( class UFGFactoryLegInstanceMeshProxy* proxy );
 
 	/**
 	 * Used by buildables in postload to migrate slot data to Customization Swatch. This should only be utilized by loading logic and is using cached data
@@ -401,7 +518,21 @@ public:
 	/** This is externalized from the build gun state to allow for easier mod support */
 	UPROPERTY()
 	TArray< TSubclassOf< class AFGBuildable > > mPreviewSkinsOnBuildablesList;
+
+	UFUNCTION(BlueprintPure,Category = "BuildableSubsystem|Proximity")
+	int32 GetNumFactoriesNeededForCloseCheck() const { return mNumFactoriesNeededForCloseCheck; }
+
+	UFUNCTION(BlueprintPure,Category = "BuildableSubsystem|Proximity")
+	float GetDistanceConsideredClose() const { return mDistanceConsideredClose; }
+
 	
+	/** Default number of slots used for overclocking shards. This is the default for all buildables that do not have an override. */
+	UPROPERTY( EditDefaultsOnly, Category = "Productivity", meta = (EditCondition = "mOverridePotentialShardSlots", EditConditionHides) )
+	int32 mDefaultPotentialShardSlots;
+	
+	/** Default slot size for the production boost power shards. This is the default for all buildables that do not have an override. */
+	UPROPERTY( EditDefaultsOnly, Category = "Productivity", meta = (EditCondition = "mOverrideProductionShardSlotSize", EditConditionHides) )
+	int32 mDefaultProductionShardSlotSize;
 private:
 
 	/** last used net construction ID. Used to identify pending constructions over network. Will increase ID every constructed building. */
@@ -410,6 +541,9 @@ private:
 	/** List of all buildables. */
 	UPROPERTY()
 	TArray< class AFGBuildable* > mBuildables;
+
+	/** Count of all buildables. */
+	TMap< TSubclassOf< AFGBuildable >, int32 > mBuildableCount;
 
 	/************************************************************************/
 	/* Begin variables for parallelization									*/
@@ -429,7 +563,16 @@ private:
 	*	A bucket can contain a single conveyor belt, a section or a looped section
 	*	An exception exists for belts that connect to buildables with 2 outputs, those are added to a separate buckets
 	*/
-	TArray< FConveyorBucket* > mConveyorBuckets;
+	TArray< FConveyorTickGroup* > mConveyorTickGroup;
+
+	/**
+	 *	Subset of mConveyorTickGroups. The groups that are freshly created and do not have Chain Actors assigned yet
+	 */
+	TArray< FConveyorTickGroup* > mConveyorGroupsPendingChainActors;
+	
+	
+	UPROPERTY()
+	TMap< AFGBuildable*, int32 > mBuildableToSharedBucketIndexMap;
 
 	/** All conveyors that are not safe to execute in parallel
 	*	At the time of writing this is used only for conveyors connecting to buildings with multiple outputs
@@ -437,10 +580,16 @@ private:
 	TArray< AFGBuildableConveyorBase* > mSerialConveyorGroup;
 
 	// Groupings of conveyor buckets
-	TArray< TArray < FConveyorBucket* > > mConveyorBucketGroups;
+	TArray< TArray < FConveyorTickGroup* > > mConveyorBucketGroups;
 
 	// Track whether or not we need to repopulate our conveyor groups
 	bool mConveyorBucketGroupsDirty;
+
+	/** This contains all conveyorChains - Used to tick them on client */
+	TArray< class AFGConveyorChainActor* > mClientConveyorChains;
+	
+	// Groupings of ConveyorChainActors NOTE: This is only used by clients. Server will tick the chain actors via the lead conveyor base
+	TArray < TArray < class AFGConveyorChainActor* > > mClientConveyorChainGroups;
 
 	/** All conveyor attachments */
 	UPROPERTY()
@@ -452,6 +601,9 @@ private:
 	// Track if we need to rebuild the attachments groupings
 	bool mConveyorAttachmentGroupsDirty;
 
+	// Clients Only (Server will tick these via lead belts) - Do we need to rebuild the conveyor chain groupings
+	bool mClientConveyorChainGroupsDirty;
+
 	/************************************************************************/
 	/* End variables for parallelization									  */
 	/************************************************************************/
@@ -460,10 +612,6 @@ private:
 	UPROPERTY(EditAnywhere, Category="Colorable Instance Actor")
 	AActor* mBuildableInstancesActor;
 
-	/** Hierarchical instances for the factory Legs. */
-	UPROPERTY( EditAnywhere, Category = "FactoryLeg Instance Actor" )
-	AActor* mFactoryLegInstancesActor;
-	
 	/**/
 	UPROPERTY()
 	UFGProductionIndicatorInstanceManager* mProductionIndicatorInstanceManager = nullptr;
@@ -471,10 +619,6 @@ private:
 	/** Map of colorable static meshes to their corresponding instance manager */
 	UPROPERTY(EditAnywhere, Category="Colored Instance Managers" )
 	TMap< FName, class UFGColoredInstanceManager* > mColoredInstances;
-
-	/** Map of factory leg meshes to their corresponding instance manager */
-	UPROPERTY( EditAnywhere, Category = "Factory Leg Instance Managers" )
-	TMap< class UStaticMesh*, class UFGFactoryLegInstanceManager* > mFactoryLegInstances;
 
 	bool mColorSlotsAreDirty = false;
 	
@@ -501,7 +645,7 @@ private:
 	/** List of actors which are having customizations (color, pattern etc. ) previewed on them so we can clear them later*/
 	UPROPERTY()
 	TArray< AActor* > mPreviewingCustomizationsList;
-
+	
 	/** This contains all buildable light sources. Used to update light sources when light color slots have changed */
 	TArray< class AFGBuildableLightSource* > mBuildableLightSources;
 
@@ -545,25 +689,6 @@ private:
 	/** Is factory optimization ( tick control ) active */
 	UPROPERTY( EditDefaultsOnly, Category = "Factory" )
 	bool mFactoryOptimizationEnabled;
-
-	/** How much time can differ between each build effect */
-	UPROPERTY( EditDefaultsOnly, Category = "Replay" )
-	float mReplayEffecTimeDilation;
-
-	/** How much time between each build effect when replaying the whole factory */
-	UPROPERTY( EditDefaultsOnly, Category = "Replay" )
-	float mReplayEffectTimerDefault;
-
-	/** Timer used for the replay effect */
-	float mReplayEffectTimer;
-
-	/** Array with all the buildings that should replay their effect */
-	TArray< AFGBuildable* > mReplayEffectArray;
-
-	/**used for comparing and finding materials of factory meshes*/
-	UPROPERTY( EditDefaultsOnly )
-	UMaterial* mDefaultFactoryMaterial;
-
 	/** Used to store different belt materials and their speeds so their materials can be shared */
 	UPROPERTY()
 	TMap< int32, UMaterialInstanceDynamic* > mConveyorTrackSpeedToMaterial;
@@ -587,14 +712,7 @@ private:
 	/** Asset containing list of all Swatch assets */
 	UPROPERTY( EditDefaultsOnly, Category = "Customization" )
 	TArray< TSubclassOf< class UFGFactoryCustomizationCollection > > mCustomizationCollectionClasses;
-
-	/** List of all Active Replication Detail Actors to be considered for removal */
-	UPROPERTY()
-	TArray< class AFGReplicationDetailActor* > mRepDetailCleanupArray;
-
-	UPROPERTY()
-	float mTimeUntilRepDetailCheck = 1.0f;
-
+	
 	UPROPERTY()
 	float mSqDistanceForDetailCleanup = 10000000.f;
 
@@ -604,6 +722,21 @@ private:
 
 	/* World time for the factory tick*/
 	float mAccumulatedFactorySimulationTime;
+
+	UPROPERTY(SaveGame)
+	AFGProjectAssembly* mProjectAssemblyActor = nullptr;
+
+	/* Spawned build effect actor this frame. */
+	UPROPERTY(Transient)
+	TMap<TSubclassOf< AFGBuildEffectActor >,AFGBuildEffectActor*> mBuildEffectActorMap; 
+
+	FBuildableComponentsOctree mBuildableComponentsOctree;
+	
+#if WITH_EDITORONLY_DATA
+	/** Buckets for the currently playing timelapse effects */
+	UPROPERTY( VisibleInstanceOnly, Transient, Category = "Timelapse" )
+	TArray<FFGBuildableTimelapseBucket> mActiveTimelapseBuckets;
+#endif
 };
 
 template< typename T >

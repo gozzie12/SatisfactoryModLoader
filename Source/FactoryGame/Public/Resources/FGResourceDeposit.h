@@ -4,8 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "FGResourceNode.h"
 #include "FGResourceSettings.h"
-#include "Resources/FGResourceNode.h"
 #include "FGResourceDeposit.generated.h"
 
 /**
@@ -37,6 +37,9 @@ public:
 
 	/** Sets up all the data for this node */
 	void SetupResourceInfo();
+
+	virtual void StartIsLookedAt_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
+	virtual void StopIsLookedAt_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 
 	/** Gives one resource to a player */
 	virtual void ExtractResourceAndGiveToPlayer( AFGCharacterPlayer* toPlayer, int32 amount = 1 ) override;
@@ -91,4 +94,9 @@ public:
 
 	UPROPERTY( EditInstanceOnly, Category = "Resources" )
 	TSubclassOf< class UFGResourceDescriptor > mOverrideResourceClass;
+
+	/** Determines if the resource node should be able to be radio active. */
+	UPROPERTY( BlueprintReadWrite, EditInstanceOnly, Category = "Resources" )
+	bool mCanBeRadioactive = true;
+	
 };

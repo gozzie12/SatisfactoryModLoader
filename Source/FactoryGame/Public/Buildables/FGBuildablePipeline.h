@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "FGBuildablePipeBase.h"
 #include "FGFluidIntegrantInterface.h"
-#include "Buildables/FGBuildablePipeBase.h"
 #include "FGBuildablePipeline.generated.h"
 
 
@@ -65,15 +65,18 @@ public:
 
 	// Begin AFGBuildable interface
 	virtual void Factory_Tick( float dt ) override;
+	virtual bool ShouldRegisterToFactoryTickGroup() const override;
 	// End AFGBuildable interface
 
 	// Begin IFGDismantleInterface
+	virtual void PreUpgrade_Implementation() override;
 	virtual void Upgrade_Implementation( AActor* newActor ) override;
 	// End IFGDismantleInterface
 
 	// Begin Significance
 	virtual void GainedSignificance_Implementation() override;
 	virtual void LostSignificance_Implementation() override;
+	virtual float GetSignificanceRange() override;
 	// End Significance
 
 	// Begin AFGBuildablePipeBase Interface
@@ -81,7 +84,7 @@ public:
 	// End AFGBuildablePipeBase Interface
 
 	// Begin IFGColorInterface
-	virtual void SetCustomizationData_Native( const FFactoryCustomizationData& customizationData ) override;
+	virtual void SetCustomizationData_Native( const FFactoryCustomizationData& customizationData, bool skipCombine = false ) override;
 	virtual void ApplyCustomizationData_Native( const FFactoryCustomizationData& customizationData ) override;
 	virtual void StartIsAimedAtForColor_Implementation( class AFGCharacterPlayer* byCharacter, bool isValid = true ) override;
 	virtual void StopIsAimedAtForColor_Implementation( class AFGCharacterPlayer* byCharacter ) override;
@@ -96,6 +99,8 @@ public:
 	virtual TArray< class UFGPipeConnectionComponent* > GetPipeConnections() override;
 	virtual void OnFluidDescriptorSet() override;
 	// End FluidIntegrant Interface
+
+	static void CreateClearanceData( class USplineComponent* splineComponent, const TArray< FSplinePointData >& splineData, const FTransform& pipeTransform, TArray< FFGClearanceData >& out_clearanceData, float maxDistance = -1.0f );
 
 	/**
 	 * Split this pipeline in two.
@@ -171,8 +176,6 @@ public:
 	UFUNCTION( BlueprintCallable, BlueprintPure = false, Category = "FactoryGame|Pipes|Pipeline" )
 	void GetRawValues( UPARAM( ref ) float& flowPct, UPARAM( ref ) float& contentPct ) const;
 
-	virtual void PostSerializedFromBlueprint() override;
-	
 protected:
 	/** Updates sounds depending on liquid in pipe */
 	UFUNCTION()
@@ -214,11 +217,15 @@ public:
 	static const FName mConnectionName1;
 	
 protected:
-	UPROPERTY( BlueprintReadOnly, Category = "Audio" )
+	UPROPERTY( BlueprintReadOnly, Category = "Pipeline|Audio" )
 	class UFGSoundSplineComponent* mSoundSplineComponent;
 
+	/** How far apart to place the multiple emitters on the sound spline. [cm] */
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
+	float mSoundSplineComponentEmitterInterval;
+
 	/** The ak event to post for the sound spline */
-	UPROPERTY( EditDefaultsOnly, Category = "Audio" )
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
 	class UAkAudioEvent* mSplineAudioEvent;
 
 private:
@@ -251,7 +258,7 @@ private:
 	TArray< TWeakObjectPtr< const AActor > > mIgnoreActorsForIndicator;
 
 	/** Struct with both wwise safe names and their item names */
-	UPROPERTY( EditDefaultsOnly, Category = "Pipeline" )
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
 	TArray< FStringPair > mFluidNames;
 	
 	/** Current fluid that is in the pipe */
@@ -265,9 +272,17 @@ private:
 	/** Last value used for how much flow there was in the pipe. */
 	UPROPERTY()
 	float mLastFlowForSound;
+
+	/** Last time which elapsed from last audio flow update */
+	UPROPERTY()
+	float mLastElapsedTime;
+	
+	/** How much do the value need to change from the last on for us to trigger a sound update. */
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
+	float mLastFlowForSoundUpdateThreshold;
 	
 	/** At what flow should we play rattle */
-	UPROPERTY( EditDefaultsOnly, Category = "Pipeline" )
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
 	float mRattleLimit;
 	
 	/** Are we playing rattling sound? */
@@ -275,14 +290,17 @@ private:
 	bool mIsRattling;
 	
 	/** Start rattle sound */
-	UPROPERTY( EditDefaultsOnly, Category = "Pipeline" )
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
 	class UAkAudioEvent* mStartRattleSoundEvent;
 	
 	/** Stop rattle sound */
-	UPROPERTY( EditDefaultsOnly, Category = "Pipeline" )
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
 	class UAkAudioEvent* mStopRattleSoundEvent;
 	
 	/** Timer to handle the update when this pipe is significant. */
 	UPROPERTY()
 	FTimerHandle mUpdateSoundsHandle;
+	/** How often do we update the sound parameters. [s] */
+	UPROPERTY( EditDefaultsOnly, Category = "Pipeline|Audio" )
+	float mUpdateSoundsTimerInterval;
 };

@@ -5,6 +5,7 @@
 AFGWalkwayHologram::AFGWalkwayHologram() : Super() {
 	this->mOnlyAllowLineZoop = false;
 	this->mPlacementRequirements = EFactoryBuildingPlacementRequirements::FBPR_MustSnap;
+	this->mAllowEdgePlacementInDesignerEvenOnIntersect = true;
 }
 bool AFGWalkwayHologram::TrySnapToActor(const FHitResult& hitResult){ return bool(); }
 void AFGWalkwayHologram::SetHologramLocationAndRotation(const FHitResult& hitResult){ }
@@ -12,4 +13,4 @@ void AFGWalkwayHologram::CheckValidPlacement(){ }
 void AFGWalkwayHologram::UpdateZoop(){ }
 void AFGWalkwayHologram::ConstructZoop(TArray<AActor*>& out_children){ }
 FVector AFGWalkwayHologram::ConvertZoopToWorldLocation(const FIntVector& zoop) const{ return FVector(); }
-void AFGWalkwayHologram::BeginPlay(){ }
+void AFGWalkwayHologram::BeginPlay(){ Super::BeginPlay(); }

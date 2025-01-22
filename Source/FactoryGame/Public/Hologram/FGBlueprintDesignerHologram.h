@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Hologram/FGBuildableHologram.h"
+#include "FGBuildableHologram.h"
 #include "FGBlueprintDesignerHologram.generated.h"
 
 /**
@@ -17,12 +17,12 @@ class FACTORYGAME_API AFGBlueprintDesignerHologram : public AFGBuildableHologram
 	
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 
-	virtual void HandleClearanceOverlap( const FOverlapResult& overlap, const FVector& locationOffset, bool HologramHasSoftClearance ) override;
 	virtual void SpawnChildren( AActor* hologramOwner, FVector spawnLocation, APawn* hologramInstigator ) override;
 	virtual AActor* Construct( TArray< AActor* >& out_children, FNetConstructionID netConstructionID ) override;
+	virtual void InitializeClearanceData() override;
 
 protected:
-	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName ) override;
+	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName, const FName& attachSocketName ) override;
 	virtual void OnHologramTransformUpdated() override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
 	

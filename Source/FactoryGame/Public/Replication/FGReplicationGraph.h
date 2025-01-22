@@ -3,13 +3,18 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "CoreMinimal.h"
+#include "EngineGlobals.h"
+#include "UObject/Package.h"
+#include "Engine/ActorChannel.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/NetConnection.h"
+#include "Misc/ConfigCacheIni.h"
 #include "ReplicationGraph.h"
 #include "FGProductionIndicatorComponent.h"
 #include "FGReplicationGraph.generated.h"
 
-DECLARE_LOG_CATEGORY_EXTERN( LogFactoryReplicationGraph, Display, All );
-DECLARE_LOG_CATEGORY_EXTERN( LogConveyorFrequencyNodes, Display, All );
+FACTORYGAME_API DECLARE_LOG_CATEGORY_EXTERN( LogFactoryReplicationGraph, Display, All );
+FACTORYGAME_API DECLARE_LOG_CATEGORY_EXTERN( LogConveyorFrequencyNodes, Display, All );
 
 enum class EClassRepPolicy : uint8
 {
@@ -58,12 +63,12 @@ public:
 	virtual void InitGlobalGraphNodes() override;
 	virtual void RouteAddNetworkActorToNodes( const FNewReplicatedActorInfo& ActorInfo, FGlobalActorReplicationInfo& GlobalInfo ) override;
 	virtual void RouteRemoveNetworkActorToNodes( const FNewReplicatedActorInfo& ActorInfo ) override;
-	virtual int32 ServerReplicateActors( float DeltaSeconds ) override;
 	virtual void NotifyActorDormancyChange( AActor* Actor, ENetDormancy OldDormancyState ) override;
+	virtual void AddNetworkActor(AActor* Actor) override;
 	// ~ end UReplicationGraph implementation
 
 	/** Sets the class replication info for a class */
-	void InitClassReplicationInfo( FClassReplicationInfo& classInfo, UClass* inClass, bool isSpatialized, int32 NetServerMaxTickRate );
+	void InitClassReplicationInfo( struct FClassReplicationInfo& classInfo, UClass* inClass, bool isSpatialized, int32 NetServerMaxTickRate );
 
 	UPROPERTY()
 	TArray<UClass*> mSpatializedClasses;
@@ -88,10 +93,10 @@ public:
 
 	/** Node that holds a list of actors that are always Net Relevant. */
 	UPROPERTY()
-	UReplicationGraphNode_ActorList* mAlwaysRelevantNode;
+	UFGReplicationGraphNode_AlwaysRelevantWithDormancy* mAlwaysRelevantNode;
 
 	UPROPERTY()
-	UFGReplicationGraphNode_ConditionallyAlwaysRelevant* mConditionalRelevancyNode;
+	class UFGReplicationGraphNode_ConditionallyAlwaysRelevant* mConditionalRelevancyNode;
 
 	/** Node holds all player states and cycles through them so they do not all attempt replication every frame */
 	UPROPERTY()
@@ -103,20 +108,33 @@ public:
 	/** Maps the actors that need to be always relevant across streaming levels */
 	TMap<FName, FActorRepListRefView> mAlwaysRelevantStreamingLevelActors;
 
+	/**
+	 * Registers the default replication policy for the specified actor
+	 * If the actor is not explicitly registered in the replication graph, it will be assumed to be ConditionallyRelevant, which
+	 * should be good enough for a lot of use cases but if you want spatialization or per-connection relevancy, you can override that
+	 */
+	static void RegisterCustomClassRepPolicy( TSoftClassPtr<AActor> inActor, EClassRepPolicy inRepPolicy );
 protected:
+	static TMap<TSoftClassPtr<AActor>, EClassRepPolicy> CustomClassRepPolicies;
 	 
 	/** Class types of equipment who's dependency to the pawn shouldn't be removed if they're unequipped. */
 	UPROPERTY()
 	TSet<UClass*> mPersistentDependencyClasses;
 
-	// Actor Dependencies 
+	// Actor Dependencies
+	/** Callback on when a train replication actor is added to the game so we can add the vehicles in the consist as dependencies. */
+	void OnTrainReplicationActorAdded( class AFGTrainReplicationActor* replicationActor );
+	void OnTrainReplicationActorRemoved( class AFGTrainReplicationActor* replicationActor );
+
+	/**
+	 * Callback for when a locomotive is possessed or unpossessed by a player controller so we can add a dependency.
+	 * Note: Locomotive nor controller can be null.
+	 */
+	void OnLocomotivePossessedBy( class AFGLocomotive* locomotive, AController* controller );
+	void OnLocomotiveUnPossessed( class AFGLocomotive* locomotive, AController* controller );
+	
 	/** Callback on when actor dependencies for character players that should always exist for the pawn is spawned */
 	void AddPersistentDependencyActor( class AFGCharacterPlayer* pawn, class IFGReplicationDependencyActorInterface* depedencyActor );
-
-	/** Callbacks for handling replication detail actors for manufacturers */
-	void AddReplicationDependencyActor( class AActor* owner, class AFGReplicationDetailActor* replicationDetailActor );
-	void RemoveReplicationDependencyActor( class AActor* owner, class AFGReplicationDetailActor* replicationDetailActor );
-	void OnReplicationDetailActorStateChange( class IFGReplicationDetailActorOwnerInterface* owner, bool newState );
 
 	/** Callback to handle when a player equips any equipment and add it to the pawns dependency list */
 	void OnCharacterPlayerEquip( class AFGCharacterPlayer* pawn, class AFGEquipment* equipment );
@@ -127,8 +145,8 @@ protected:
 	/** Callback on when the foliage pickup proxy has spawned for a player */
 	void OnCharacterPlayerFoliagePickupSpawned( class AFGCharacterPlayer* pawn, class AFGFoliagePickup* foliagePickup );
 
-	/** Callback to when a building registers (or unregisters) a player. Handles dormancy state changes for buildables in these cases. */
-	void OnBuildableRegistedPlayerChanged( class AFGBuildable* buildable, class AFGCharacterPlayer* player, bool isInUse );
+	/** Called when the pawn controlled by the given player controller changes */
+	void OnPlayerControllerPawnChanged( class APlayerController* playerController, APawn* oldPawn, APawn* newPawn );
 
 	/** Whether the given mapping is spatialized in any way */
 	FORCEINLINE bool IsSpatialized( EClassRepPolicy mapping ) { return mapping >= EClassRepPolicy::CRP_Spatialize_Static; }
@@ -163,6 +181,27 @@ private:
 	void LogCurrentActorDependencyList( FGlobalActorReplicationInfo& actorInfo, FString& logMarker );
 
 	UReplicationGraphNode_AlwaysRelevant_ForConnection* GetAlwaysRelevantNodeForConnection( UNetConnection* Connection );
+};
+
+UCLASS()
+class FACTORYGAME_API UFGReplicationGraphNode_AlwaysRelevantWithDormancy : public UReplicationGraphNode_ActorList
+{
+	GENERATED_BODY()
+public:
+	// Begin UReplicationGraphNode_ActorList interface
+	virtual void NotifyAddNetworkActor( const FNewReplicatedActorInfo& ActorInfo ) override;
+	virtual bool NotifyRemoveNetworkActor( const FNewReplicatedActorInfo& ActorInfo, bool bWarnIfNotFound = true ) override;
+	// End UReplicationGraphNode_ActorList interface
+
+	void AddActor(const FNewReplicatedActorInfo& ActorInfo, FGlobalActorReplicationInfo& ActorRepInfo);
+	void RemoveActor(const FNewReplicatedActorInfo& ActorInfo);
+protected:
+	UPROPERTY()
+	UReplicationGraphNode_DormancyNode* mDormancyNode;
+	
+	void OnActorDormancyChanged(AActor* Actor, FGlobalActorReplicationInfo& GlobalInfo, ENetDormancy NewValue, ENetDormancy OldValue);
+	
+	UReplicationGraphNode_DormancyNode* GetDormancyNode();
 };
 
 UCLASS()
@@ -217,45 +256,7 @@ public:
 			return  Hz > 0.f ? ( uint32 )FMath::CeilToInt( TargetFrameRate / Hz ) : 0;
 		}
 	};
-
-	// --------------------------------------------------------
-	struct FConnectionSaturationInfo
-	{
-		FConnectionSaturationInfo( const FConnectionSaturationInfo& otherInfo )
-		{
-			RepGraphConnection = otherInfo.RepGraphConnection;
-			CurrentRatePCT = otherInfo.CurrentRatePCT;
-			MaxClientRate = otherInfo.MaxClientRate;
-		}
-
-		FConnectionSaturationInfo() : RepGraphConnection( nullptr ) {}
-
-		// Init based on UNetReplicationGraphConnection
-		FConnectionSaturationInfo( UNetReplicationGraphConnection* connection ) : RepGraphConnection( connection )
-		{
-			for( int32 i = 0; i < LoadBalanceFrameCount; ++i )
-			{
-				FramesSelfSaturated[ i ] = false;
-				FramesExternalSaturated[ i ] = false;
-			}
-
-			MaxClientRate = connection->NetConnection->Driver->MaxClientRate;
-			UE_LOG( LogGame, Log, TEXT( "Initialized MaxClientRate == %i" ), MaxClientRate );
-		}
-
-		UNetReplicationGraphConnection* RepGraphConnection;
-		float MaxRatePCT = 0.35f;	 // Maximum % of the total budget
-		float MinRatePCT = 0.15f;	 // Minimum % of the total budget
-		float DefaultRatePCT = 0.3f;
-		float CurrentRatePCT = 0.3f;
-		int32 MaxClientRate = 15000;	// Is copied from NetDriver on initialization
-
-		static const int32 LoadBalanceFrameCount = 60;
-		bool FramesSelfSaturated[ LoadBalanceFrameCount ];
-		bool FramesExternalSaturated[ LoadBalanceFrameCount ];
-	};
-
-
+	
 	// --------------------------------------------------------
 	struct FSettings
 	{
@@ -636,13 +637,12 @@ protected:
 
 			float halfSubdivisions = Subdivisions / 2.f;
 			HalfCellSize = CellSize / 2.f;
-
-			FVector newCellOrigin = FVector();
+			
 			for( int32 i = 0; i < Subdivisions; ++i )
 			{
 				for( int32 j = 0; j < Subdivisions; ++j )
 				{
-					newCellOrigin = FVector( Origin.X - ( ( j - halfSubdivisions ) * CellSize.X ) + HalfCellSize.X, Origin.Y - ( ( i - halfSubdivisions ) * CellSize.Y ) + HalfCellSize.Y, 0.f );
+					FVector newCellOrigin = FVector( Origin.X - ( ( j - halfSubdivisions ) * CellSize.X ) + HalfCellSize.X, Origin.Y - ( ( i - halfSubdivisions ) * CellSize.Y ) + HalfCellSize.Y, 0.f );
 					FrequencyCells.Add( new FFrequencyGrid2D_Cell( newCellOrigin ) );
 					if( world )
 					{
@@ -739,32 +739,11 @@ protected:
 	// Sorted Cell Lists (will be per connection, but for now, rebuild each gather)
 	TMap< UNetConnection*, TArray<FConveyorFrequency_SortedCell*> > mConnectionToSortedCellList;
 
-	// Track Bandwidth Saturation per connection so that we can allocate more budget per connection if other property replication isn't utilizing available budget
-	TArray< FConnectionSaturationInfo > mConnectionSaturationInfo;
-
 	// Working ints for adaptive load balancing. Does not count actors that rep every frame
 	int32 mNumExpectedReplicationsThisFrame = 0;
 	int32 mNumExpectedReplicationsNextFrame = 0;
 
 	int32 CalcFrequencyForCell( FFrequencyGrid2D_Cell* GridCell, UReplicationGraph* RepGraph, UNetReplicationGraphConnection& ConnectionManager, UNetConnection* NetConnection, FSettings& MySettings, const FNetViewerArray& Viewers, const uint32 FrameNum, bool IsPlayerInCell );
-	
-	void CleanUpConnectionSaturationInfo( UReplicationGraph* RepGraph )
-	{
-		mConnectionSaturationInfo.RemoveAll(
-			[ & ]( FConnectionSaturationInfo& connectionInfo ) { return !RepGraph->Connections.Contains( connectionInfo.RepGraphConnection ) || connectionInfo.RepGraphConnection->IsPendingKill(); } );
-	}
-
-	FConnectionSaturationInfo& GetConnectionSaturationInfo( UNetReplicationGraphConnection* repGraphConnection )
-	{
-		int32 infoIndex = mConnectionSaturationInfo.IndexOfByPredicate( [ & ]( const FConnectionSaturationInfo& connection ) { return connection.RepGraphConnection == repGraphConnection; } );
-
-		if( infoIndex == INDEX_NONE )
-		{
-			infoIndex = mConnectionSaturationInfo.Add( FConnectionSaturationInfo( repGraphConnection ) );
-		}
-
-		return mConnectionSaturationInfo[ infoIndex ];
-	}
 
 	// Has this Node Initialized its frequency grid
 	bool mHasInitializedGrid;

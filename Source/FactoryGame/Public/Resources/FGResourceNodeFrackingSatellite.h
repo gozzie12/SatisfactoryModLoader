@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Resources/FGResourceNode.h"
-#include "Resources/FGResourceNodeFrackingCore.h"
+#include "FGResourceNode.h"
+#include "FGResourceNodeFrackingCore.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 #include "FGResourceNodeFrackingSatellite.generated.h"
 
@@ -38,6 +38,7 @@ public:
 	// Begin IFGExtractableResourceInterface
 	virtual void SetIsOccupied( bool occupied ) override;
 	virtual bool CanPlaceResourceExtractor() const override;
+	virtual void OnRep_IsOccupied() override;
 	// End IFGExtractableResourceInterface
 
 	/** Will dispatch a call of SetActive on the game thread */

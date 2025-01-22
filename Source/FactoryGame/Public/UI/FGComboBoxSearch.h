@@ -13,9 +13,11 @@
 #include "Styling/SlateTypes.h"
 #include "Widgets/SWidget.h"
 #include "Components/Widget.h"
-#include "Widgets/Text/STextBlock.h" // MODDING EDIT
-#include "Widgets/Layout/SBox.h" // MODDING EDIT
+#include "Widgets/Text/STextBlock.h"
 #include "FGComboBoxSearch.generated.h"
+
+class SBox;
+class STextBlock;
 
 /**
 * The combobox allows you to display a list of options to the user in a dropdown menu for them to select one and search.

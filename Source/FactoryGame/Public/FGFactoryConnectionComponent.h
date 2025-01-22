@@ -5,6 +5,7 @@
 #include "FactoryGame.h"
 #include "FGConnectionComponent.h"
 #include "FGInventoryComponent.h"
+#include "GameFramework/Actor.h"
 #include "FGFactoryConnectionComponent.generated.h"
 
 // For lazy people. This is used in nearly every BeginPlay of Proxies.
@@ -78,16 +79,19 @@ public:
 	/**
 	 * Set the inventory associated with this connection
 	 */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|FactoryConnection" )
 	void SetInventory( class UFGInventoryComponent* inventory );
 
 	/**
 	* Sets a specified index for the component to access on its assigned inventory
 	*/
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|FactoryConnection" )
 	void SetInventoryAccessIndex( int32 index );
 
 	/**
 	* Gets the inventory access index specified for this factory connection
 	*/
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory|FactoryConnection" )
 	int32 GetInventoryAccessIndex() const { return mInventoryAccessIndex; }
 
 	/**
@@ -95,11 +99,13 @@ public:
 	 * @note Sets both ends of the connection.
 	 * If there already a connection made we assert.
 	 */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|FactoryConnection" )
 	void SetConnection( class UFGFactoryConnectionComponent* toComponent );
 
 	/**
 	 * Get which connection this is connected to.
 	 */
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory|FactoryConnection" )
 	FORCEINLINE class UFGFactoryConnectionComponent* GetConnection() const { return mConnectedComponent; }
 
 	/**
@@ -107,6 +113,7 @@ public:
 	 * @note Clears both ends of the connection.
 	 * If nothing is connected this does nothing.
 	 */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Factory|FactoryConnection" )
 	void ClearConnection();
 
 	/**
@@ -202,17 +209,18 @@ public:
 	static UFGFactoryConnectionComponent* FindCompatibleOverlappingConnections(
 		class UFGFactoryConnectionComponent* component,
 		const FVector& location,
-		float radius,
-		UFGFactoryConnectionComponent* lowPrioConnection = nullptr );
+		const AActor* priorityActor,
+		float radius );
 
 	/** Find the closest overlapping connection matching all search criteria. */
 	static UFGFactoryConnectionComponent* FindOverlappingConnections(
 		UWorld* world,
 		const FVector& location,
+		const AActor* priorityActor,
 		float radius,
 		EFactoryConnectionConnector connector,
 		EFactoryConnectionDirection direction,
-		UFGFactoryConnectionComponent* lowPrioConnection = nullptr );
+		const TArray< TSubclassOf< class AFGBuildable > >& buildableClassFilter = {} );
 
 	/**
 	 * Find all overlapping connections and returns them in a list.
@@ -233,7 +241,7 @@ private:
 	 */
 	static UFGFactoryConnectionComponent* CheckIfSnapOnlyIsBlockedByOtherConnection(
 		UFGFactoryConnectionComponent* connectionToCheck,
-		TArray< FOverlapResult > potentialBlockers );
+		const TArray< FOverlapResult >& potentialBlockers );
 
 protected:
 	/** Physical type of connector used for this connection. */

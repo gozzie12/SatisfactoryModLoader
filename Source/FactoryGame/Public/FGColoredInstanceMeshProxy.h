@@ -8,7 +8,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "FGColoredInstanceMeshProxy.generated.h"
 
-
 /**
  * Proxy placed in buildings to be replaced with an instance on creation, supports coloring.
  */
@@ -37,20 +36,28 @@ public:
 	FORCEINLINE uint8 GetNumCustomDataFloats() const { return mNumCustomDataFloats; }
 
 protected:
+	// Begin USceneComponent interface
+	virtual void OnUpdateTransform( EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport ) override;
+	// End USceneComponent interface
+	
 	// Begin AActorComponent interface
 	virtual void OnHiddenInGameChanged() override;	
 public:
 	virtual bool ShouldCreateRenderState() const override;
 	// End AActorComponent interface
+	virtual bool ShouldBlockInstancing() const;
 
 private:
 	void InstantiateInternal();
-
+	virtual void PostLoad() override;
 public:
 
 	UPROPERTY( EditDefaultsOnly, BlueprintReadWrite )
 	bool mBlockInstancing = false;
 
+	UPROPERTY( EditDefaultsOnly, BlueprintReadWrite )
+	bool mBlockInstancingWithLumen = false;
+	
 	UPROPERTY( EditDefaultsOnly, BlueprintReadWrite )
 	bool mBlockColoring = false;
 

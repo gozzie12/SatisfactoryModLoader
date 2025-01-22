@@ -3,8 +3,55 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableFactory.h"
+#include "FGBuildableFactory.h"
 #include "FGBuildableGenerator.generated.h"
+
+UCLASS()
+class FACTORYGAME_API UFGGeneratorClipboardSettings : public UFGFactoryClipboardSettings
+{
+	GENERATED_BODY()
+public:
+
+	/** The potential we would like to apply */
+	UPROPERTY( BlueprintReadWrite )
+	float mTargetPotential;
+
+	/** The production boost we would like to apply */
+	UPROPERTY( BlueprintReadWrite )
+	float mTargetProductionBoost;
+
+	/** The calculated potential we can apply with the shards/crystals we have. Used to simulate UI changes */
+	UPROPERTY( BlueprintReadWrite )
+	float mReachablePotential;
+
+	/** The calculated production we can apply with the shards we have */
+	UPROPERTY( BlueprintReadWrite )
+	float mReachableProductionBoost;
+
+	/** Descriptor for the overclocking shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mOverclockingShardDescriptor;
+
+	/** Descriptor for the production boost shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mProductionBoostShardDescriptor;
+};
+
+UCLASS()
+class FACTORYGAME_API UFGGeneratorClipboardRCO : public UFGRemoteCallObject
+{
+	GENERATED_BODY()
+public:
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
+
+	UFUNCTION( Server, Reliable )
+	void Server_PasteSettings( class AFGBuildableGenerator* generator, AFGCharacterPlayer* player, float overclock, float productionBoost, TSubclassOf<UFGPowerShardDescriptor> overclockingShard, TSubclassOf<UFGPowerShardDescriptor> productionBoostShard );
+
+private:
+	UPROPERTY( Replicated, Meta = ( NoAutoJson ) )
+	bool mForceNetField_UFGGeneratorClipboardRCO = false;
+
+};
 
 /**
  * Base for all generators, i.e. coal, fuel, nuclear etc.
@@ -14,23 +61,22 @@ class FACTORYGAME_API AFGBuildableGenerator : public AFGBuildableFactory
 {
 	GENERATED_BODY()
 public:
-	/** Decide on what properties to replicate */
-	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
-	virtual void PreReplication( IRepChangedPropertyTracker& ChangedPropertyTracker ) override;
-
-	/** Constructor */
 	AFGBuildableGenerator();
-
-	// Begin AActor interface
-	virtual void BeginPlay() override;
-	virtual void SetActorHiddenInGame( bool bNewHidden ) override;
-	// End AACtor interface
+	
+	/** Decide on what properties to replicate */
+	virtual void GetConditionalReplicatedProps(TArray<FFGCondReplicatedProperty>& outProps) const override;
 
 	// Begin AFGBuildableFactory interface
 	virtual bool CanProduce_Implementation() const override;
 	virtual bool Factory_HasPower() const override;
 	virtual EProductionStatus GetProductionIndicatorStatus() const override;
 	// End AFGBuildableFactory interface
+
+	//~ Begin IFGFactoryClipboardInterface
+	virtual bool CanUseFactoryClipboard_Implementation() override;
+	virtual UFGFactoryClipboardSettings* CopySettings_Implementation() override;
+	virtual bool PasteSettings_Implementation( UFGFactoryClipboardSettings* settings ) override;
+	//~ End IFGFactoryClipboardInterface
 
 	/** Get the current load of this generator in the range [0,1]. */
 	UFUNCTION( BlueprintPure, Category = "Power" )
@@ -81,7 +127,7 @@ protected:
 
 private:
 	/** Current load of this generator in the range [0,1]. */
-	UPROPERTY( Replicated )
+	UPROPERTY( meta = ( FGReplicated ) )
 	float mLoadPercentage;
 
 	/* if true these functions have a blueprint implemented version, otherwise call native. */

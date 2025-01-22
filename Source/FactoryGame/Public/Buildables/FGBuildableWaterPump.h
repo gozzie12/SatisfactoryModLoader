@@ -3,7 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableResourceExtractor.h"
+#include "FGBuildableResourceExtractor.h"
 #include "FGBuildableWaterPump.generated.h"
 
 /**
@@ -13,9 +13,7 @@ UCLASS( Abstract )
 class FACTORYGAME_API AFGBuildableWaterPump : public AFGBuildableResourceExtractor
 {
 	GENERATED_BODY()
-
 public:
-	/** Ctor */
 	AFGBuildableWaterPump();
 
 protected:	

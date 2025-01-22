@@ -3,9 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Serialization/ArchiveUObject.h"
-#include "EngineGlobals.h"
-#include "Engine.h"
+#include "Serialization/ObjectReader.h"
 
 /**
  * Our modded version of object reader but modified for blueprints. When this is used we have already spawned/created dummy object. We then use this class 
@@ -14,10 +12,11 @@
 class FBlueprintObjectReaderFName : public FObjectReader
 {
 public:
-	FBlueprintObjectReaderFName( UObject* Obj, TArray<uint8>& InBytes, int32 saveVersion, class UWorld* world );
+	FBlueprintObjectReaderFName( UObject* Obj, TArray<uint8>& InBytes, int32 saveVersion, class UWorld* world, FPackageFileVersion version );
 
 	FBlueprintObjectReaderFName& operator<<( class UObject*& Res );
 	virtual FArchive& operator<<( class FName& N ) override;
+	FArchive& operator<<( FObjectPtr& Res );
 private:
 	class UWorld* mWorld;
 

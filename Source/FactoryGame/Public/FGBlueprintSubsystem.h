@@ -8,11 +8,14 @@
 #include "FGRemoteCallObject.h"
 #include "FGSaveInterface.h"
 #include "FGSubsystem.h"
+#include "AbstractInstanceManager.h"
 #include "FGBlueprintSubsystem.generated.h"
 
-extern TAutoConsoleVariable< int32 > CVarBlueprintDebug;
-
+class AFGBuildable;
+struct FRuntimeBuildableInstanceData;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnBlueprintDescriptorUpdated, UFGBlueprintDescriptor*, blueprintDesc );
+
+DECLARE_STATS_GROUP( TEXT("BlueprintSubsystem"), STATGROUP_BlueprintSubsystem, STATCAT_Advanced );
 
 USTRUCT()
 struct FBlueprintNameAndHash
@@ -54,12 +57,41 @@ struct FFileNameToRawFileData
 };
 
 USTRUCT()
+struct FLightweightBuildEffectData
+{
+	GENERATED_BODY()
+
+	FLightweightBuildEffectData() : RuntimeDataIndex( INDEX_NONE ), BuildableClass( nullptr ), AbstractInstanceData( nullptr )
+	{}
+	
+	FLightweightBuildEffectData( int32 runtimeDataIndex, TSubclassOf< AFGBuildable > buildableClass, UAbstractInstanceDataObject* abstractInstanceData ) :
+			RuntimeDataIndex( runtimeDataIndex ),
+			BuildableClass( buildableClass ),
+			AbstractInstanceData( abstractInstanceData )
+	{}
+	
+	UPROPERTY()
+	int32 RuntimeDataIndex;
+
+	UPROPERTY()
+	TSubclassOf< AFGBuildable > BuildableClass;
+
+	UPROPERTY()
+	UAbstractInstanceDataObject* AbstractInstanceData;
+};
+
+USTRUCT()
 struct FBlueprintBuildEffectData
 {
 	GENERATED_BODY()
 
 	FBlueprintBuildEffectData() : Transform( FTransform::Identity ), ID( INDEX_NONE ), NumBuildables( 0 )
 	{}
+
+	void AddLightweightData( int32 runtimeDataIndex, TSubclassOf< AFGBuildable > buildableClass, UAbstractInstanceDataObject* abstractData )
+	{
+		LightweightData.Add( FLightweightBuildEffectData(runtimeDataIndex, buildableClass, abstractData) );
+	}
 	
 	UPROPERTY()
 	FTransform Transform;
@@ -72,6 +104,9 @@ struct FBlueprintBuildEffectData
 
 	UPROPERTY( NotReplicated )
 	TArray< class AFGBuildable* > Buildables;
+
+	UPROPERTY( NotReplicated )
+	TArray< FLightweightBuildEffectData > LightweightData;
 
 	UPROPERTY()
 	TWeakObjectPtr< APawn > Instigator;
@@ -114,8 +149,8 @@ public:
 	/// Designer RPCS
 	
 	// Server call from client to initiate a save of a designer
-	UFUNCTION( Server, Reliable, WithValidation )
-	void Server_SaveBlueprintInDesigner( class AFGBuildableBlueprintDesigner* designer, class AFGPlayerController* controller, FBlueprintRecord record );
+	UFUNCTION( Server, Reliable )
+	void Server_SaveBlueprintInDesigner( class AFGBuildableBlueprintDesigner* designer, class AFGPlayerController* controller, FBlueprintRecord record, FBlueprintCategoryRecord categoryRecord, FBlueprintSubCategoryRecord subCategoryRecord );
 
 	UFUNCTION( Server, Reliable )
 	void Server_ClearBlueprintDesigner( class AFGBuildableBlueprintDesigner* designer, class AFGPlayerController* controller );
@@ -171,6 +206,7 @@ public:
 	void GenerateManifest();
 
 	/** Enumerates all existing blueprints, and creates the neccesary descriptors for each */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|FactoryBlueprint" )
 	void RefreshBlueprintsAndDescriptors();
 
 	/** Iterates all existing blueprint descriptors and sets whether they meet the recipe requirements */
@@ -205,17 +241,19 @@ public:
 	void CreateBlueprintWorld();
 	
 	/** Write a TArray of actor data out to blueprint Save data */
-	FBlueprintHeader WriteBlueprintToArchive(FBlueprintRecord& record, const FTransform& blueprintOrigin, class AFGBuildableBlueprintDesigner* designer, TArray< class AFGBuildable* >& buildables, FIntVector dimensions );
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|FactoryBlueprint" )
+	FBlueprintHeader WriteBlueprintToArchive(const FBlueprintRecord& record, const FTransform& blueprintOrigin, const TArray< class AFGBuildable* >& buildables, FIntVector dimensions );
 
 	/** Writes a Blueprint to disc */
-	bool WriteBlueprintToDisk( FBlueprintRecord& record );
+	bool WriteBlueprintToDisk( const FBlueprintRecord& record );
 
 	/** Writes just an updated config to disk from a record */
 	bool WriteBlueprintConfigToDisk( const FBlueprintRecord& record );
 
 	/** Gathers the total cost for a list of buildables */
-	void CalculateBlueprintCost( TArray< AFGBuildable* >& buildables, TArray< FBlueprintItemAmount >& out_cost );
-
+	void CalculateBlueprintCost( const TArray< AFGBuildable* >& buildables, TArray< FBlueprintItemAmount >& out_cost ) const;
+	void CalculateBlueprintCost( const TArray< AFGBuildable* >& buildables, TArray< FItemAmount >& out_cost ) const;
+	
 	/** Loads a file from the blueprint directory into the passed location */
 	bool LoadFileFromDisk( const FString& fileName, const FString& extension, TArray< uint8 >& out_FileData );
 
@@ -237,7 +275,7 @@ public:
 	/** Load Actors into blueprint designer
 	 * @param instigator (optional)  AActor* the actor that requested the blueprint. */
 	void LoadStoredBlueprint(UFGBlueprintDescriptor* blueprintDesc, const FTransform& blueprintOrigin, TArray< class AFGBuildable* >& out_spawnedBuildables, bool useBlueprintWorld = false, class
-	                         AFGBuildableBlueprintDesigner* = nullptr, APawn* instigator = nullptr );
+	                         AFGBuildableBlueprintDesigner* = nullptr, APawn* instigator = nullptr, const TFunction<void(AFGBuildable*)>& buildablePreBeginPlayDelegate = nullptr, class AFGBlueprintProxy* blueprintProxy = nullptr );
 
 	/** Collects all objects for a given "root set". The root set in this case will be a list of buildables and we gather objects from them */
 	void CollectObjects( TArray< class AFGBuildable* >& buildables, TArray< UObject* >& out_objectsToSerialize );
@@ -246,10 +284,16 @@ public:
 	FString GetSessionBlueprintPath();
 
 	/**
-	 * Removes any invalid path characters from a blueprint name. This is a security meassure to block invalid access attempts by passing "../.." values in redirecting to higher level folders
-	 * @return Returns true if any characters were removed
+	 * Removes any invalid path characters from a blueprint name.
 	**/
-	static bool SanitizeBlueprintSessionOrFileName( FString& out_santizedString );
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|FactoryBlueprint" )
+	static FString SanitizeBlueprintFileName( const FString& blueprintName );
+
+	/**
+	* Removes any invalid path characters from a blueprint session name (the name used as the folder which has diff requirements than a file name).
+	**/
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|FactoryBlueprint" )
+	static FString SanitizeBlueprintFolderName( const FString& folderName );
 
 	/** Get an array to all blueprint world buildables present */
 	const TArray< class AFGBuildable* >& GetBlueprintWorldBuildables() { return mBlueprintWorldBuildables; }
@@ -268,9 +312,19 @@ public:
 	 */
 	AFGBuildableBlueprintDesigner* IsLocationInsideABlueprintDesigner( const FVector& hitLocation );
 
-	/** When a buildable with a certain blueprint build effect ID begins play it notifies the subsystem so we can add that data */
+	/**
+	 *	When a buildable with a certain blueprint build effect ID begins play it notifies the subsystem
+	 *	so we can add that data and potentially start the build effect in Tick
+	 */
 	void NotifyBuildableWithBlueprintBuildIDSet( class AFGBuildable* buildable, int32 id );
 
+	/**
+	 *	When a lightweight is added with a certain blueprint build effect ID it notifies the subsystem
+	 *	so we can add that data and potentially start the build effect in Tick
+	 */
+	void NotifyRuntimeInstanceWithBlueprintBuildIDSet( int32 buildEffectId, int32 runtimeIndex, TSubclassOf< class AFGBuildable > buildableClass, UAbstractInstanceDataObject* abstractData );
+
+	// Increment and return a valid blueprint buildeffect ID
 	int32 GetUniqueBlueprintBuildEffectID() { mBlueprintBuildEffectID++; return mBlueprintBuildEffectID; }
 	
 	UFUNCTION()
@@ -315,7 +369,8 @@ public:
 	void GetBlueprintCategoryAndSubCategoryByPrio( const int32 catID, const int32 subID, UFGBlueprintCategory** out_Category, UFGBlueprintSubCategory** out_SubCategory );
 
 	// Get a blueprint Descriptor by name. Null if that name could not be found
-	UFGBlueprintDescriptor* GetBlueprintDescriptorByName( FText descName )
+	UFUNCTION( BlueprintPure, Category = "Blueprint Subsystem" )
+	FORCEINLINE UFGBlueprintDescriptor* GetBlueprintDescriptorByName( FText descName )
 	{
 		for( UFGBlueprintDescriptor* desc : mAllBlueprintDescriptors )
 		{
@@ -346,11 +401,11 @@ public:
 	
 	UFGBlueprintSubCategory* CreateBlueprintSubCategory( const FBlueprintSubCategoryRecord& record );
 
-	UFGBlueprintCategory* FindCategoryWithName(FText nameTxt )
+	UFGBlueprintCategory* FindCategoryWithNameAndPriority(FString nameStr, float menuPriority )
 	{
 		for( UFGBlueprintCategory* category : mAllBlueprintCategories )
 		{
-			if( AreNamesConsideredEqual( category->GetCategoryNameFromInstance(), nameTxt ) )
+			if( AreNamesConsideredEqual( category->GetCategoryNameFromInstanceAsString(), nameStr ) && category->GetMenuPriorityFromInstance() == menuPriority )
 			{
 				return category;
 			}
@@ -371,9 +426,9 @@ public:
 		return *mAllBlueprintCategories.FindByPredicate( [&]( UFGBlueprintCategory* cat ) -> bool { return !!cat->mIsUndefined; } );
 	}
 
-	void GetGeneratedUndefinedCategoryRecord( FBlueprintCategoryRecord& out_catRecord )
+	void GetGeneratedUndefinedCategoryRecord( FBlueprintCategoryRecord& out_catRecord ) const
 	{
-		out_catRecord.CategoryName = "Undef";
+		out_catRecord.CategoryName = mUndefinedCategoryDefaultName.ToString();
 		out_catRecord.IconID = -1;
 		out_catRecord.MenuPriority = FLT_MAX;
 		out_catRecord.IsUndefined = 1;
@@ -382,7 +437,7 @@ public:
 		FBlueprintSubCategoryRecord newSubRecord;
 		newSubRecord.IsUndefined = 1;
 		newSubRecord.MenuPriority = FLT_MAX;
-		newSubRecord.SubCategoryName = "Undef";
+		newSubRecord.SubCategoryName = mUndefinedCategoryDefaultName.ToString();
 		out_catRecord.SubCategoryRecords.Add( newSubRecord );
 	}
 	
@@ -508,6 +563,7 @@ public:
 	void RemoveRawDataForFile( const FString& fileName );
 	
 private:
+	void CalculateBlueprintCustomizationCost( const TArray<AFGBuildable*>& buildables, TArray<FItemAmount>& out_cost ) const;
 	
 	UFUNCTION()
 	void OnRep_ServerManifest();
@@ -593,9 +649,16 @@ public:
 	UPROPERTY( EditDefaultsOnly )
 	TArray< TSubclassOf<class AFGBuildable > > mIgnoreRecipeRequirements;
 
+	/** Loc String to use to name default blueprint category names */
+	UPROPERTY( EditDefaultsOnly )
+	FText mUndefinedCategoryDefaultName;
 	
 private:
 	friend class UFGBlueprintRemoteCallObject;
+
+	// Blocks collection of undesired classes on blueprint serialization
+	UPROPERTY( EditDefaultsOnly )
+	TArray< TSubclassOf< UObject > > mBlacklistedBlueprintCollectClasses;
 	
 	///
 	///	Begin Blueprint Asset Declarations
@@ -712,5 +775,3 @@ private:
 	bool mClientAwaitingResponse;
 	
 };
-
-

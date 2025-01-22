@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Unlocks/FGUnlock.h"
+#include "FGUnlock.h"
 #include "FGRecipe.h"
 #include "FGUnlockRecipe.generated.h"
 
@@ -18,8 +18,8 @@ class FACTORYGAME_API UFGUnlockRecipe : public UFGUnlock
 
 public:
 	// Begin FGUnlock interface
-	virtual void Unlock( class AFGUnlockSubsystem* unlockSubssytem ) override;
-	virtual void Apply( class AFGUnlockSubsystem* unlockSubssytem ) override;
+	virtual void Unlock( class AFGUnlockSubsystem* unlockSubsystem ) override;
+	virtual void Apply( class AFGUnlockSubsystem* unlockSubsystem ) override;
 	// End FGUnlock interface
 
 #if WITH_EDITORONLY_DATA

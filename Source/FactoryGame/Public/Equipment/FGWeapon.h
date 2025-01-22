@@ -3,11 +3,11 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "FGAmmoType.h"
+#include "FGEquipment.h"
 #include "GameFramework/Actor.h"
-#include "Equipment/FGEquipment.h"
-#include "Equipment/FGAmmoType.h"
 
-#include "Equipment/FGWeaponState.h"
+#include "FGWeaponState.h"
 
 #include "FGWeapon.generated.h"
 
@@ -18,6 +18,21 @@ extern TAutoConsoleVariable< int32 > CVarWeaponDebug;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FAmmoSwitchingDelegate );
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams( FWeaponStateChangedDelegate, EWeaponState, oldState, EWeaponState, newState );
 
+/** Item state struct for the weapons */
+USTRUCT( BlueprintType )
+struct FACTORYGAME_API FFGWeaponItemState
+{
+	GENERATED_BODY()
+	
+	/** How much ammo is loaded into the weapon */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ItemState|Weapon" )
+	int32 CurrentAmmoCount{};
+	
+	/** The item we shoot */
+	UPROPERTY( EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ItemState|Weapon" )
+	TSubclassOf<class UFGAmmoType> CurrentAmmunitionClass;
+};
+
 /**
  * Base class for a weapon in the game, this provides basic firing logic only and does not specify if it's a instant hit or projectile weapon.
  */
@@ -26,51 +41,33 @@ class FACTORYGAME_API AFGWeapon : public AFGEquipment
 {
 	GENERATED_BODY()
 public:
-	/** Replication. */
-	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
-	virtual bool ReplicateSubobjects( class UActorChannel* channel, class FOutBunch* bunch, FReplicationFlags* repFlags ) override;
-
 	AFGWeapon();
 
+	// Begin UObject interface
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
+	// End UObject interface
+	
+	// Begin AActor interface
+	virtual void BeginPlay() override;
 	virtual void Tick( float DeltaSeconds ) override;
-
+	// End AActor interface
+	
 	// Begin AFGEquipment interface
-	virtual bool ShouldSaveState() const override;
-	bool InitializeMagazineObject();
-
-	/**
-	 * Put the weapon away.
-	 */
+	virtual void LoadFromItemState_Implementation(const FFGDynamicStruct& itemState) override;
+	virtual FFGDynamicStruct SaveToItemState_Implementation() const override;
+	virtual bool CanPickBestUsableActor_Implementation() const override;
 	virtual void UnEquip() override;
-
-	/**
-	 * bring up weapon and assign hud if local player
-	 */
 	virtual void Equip( class AFGCharacterPlayer* character ) override;
+	// End AFGEquipment interface
+
+	bool InitializeMagazineObject();
 
 	UFUNCTION(BlueprintPure, Category="Weapon")
 	FORCEINLINE EWeaponState GetWeaponState() const { return mWeaponState; }
-
-	/**to be called when equipping a weapon on a local player. Enabling weapons to affect the hud. */
-	void AssignHud( AFGHUD* associatedHud = nullptr );
-
-	/** Called on the owner, client or server but not both. */
-	virtual void OnPrimaryFirePressed();
-
-	/** Called by client to start fire on server. */
-	UFUNCTION( Server, Reliable )
-	void Server_StartPrimaryFire();
-
+	
 	/** Called on both client and server when firing. */
 	UFUNCTION( NetMulticast, Reliable )
 	void Multicast_BeginPrimaryFire();
-
-	/** Called on the owner, client or server but not both. */
-	virtual void OnPrimaryFireReleased();
-
-	/** Called by client to start fire on server. */
-	UFUNCTION( Server, Reliable )
-	void Server_EndPrimaryFire();
 
 	UFUNCTION( NetMulticast, Reliable )
 	void Multicast_EndPrimaryFire();
@@ -78,8 +75,7 @@ public:
 	/** Called on both client and server when firing. */
 	virtual void EndPrimaryFire();
 
-	/** Called when reload button is pressed */
-	void OnReloadPressed();
+	void Reload();
 
 	/** Actual reload implementation */
 	UFUNCTION(NetMulticast, Reliable)
@@ -101,11 +97,9 @@ public:
 	UFUNCTION( BlueprintPure, BlueprintNativeEvent, Category = "Weapon" )
 	FVector GetWeaponMeshSocketLocation( FName socketName ) const;
 
-	/** When the CycleAmmunition action is triggered */
-	void OnCycleAmmunitionTypePressed();
-
-	/** When the CycleAmmunition action is released */
-	void OnCycleAmmunitionTypeReleased();
+	/** Tobias 2024-11-04: Hacky solution for overriding the idle animation for the snowball ammo. */
+	UFUNCTION( BlueprintPure, Category="Weapon" )
+	class UAnimSequence* GetNobeliskWeaponIdleAnimationOverride() const;
 
 	UFUNCTION( Server, Reliable )
 	void Server_CycleDesiredAmmunitionType();
@@ -199,9 +193,12 @@ public:
 	/** Is sprinting allowed when firing this weapon */
 	FORCEINLINE virtual bool ShouldBlockSprintWhenFiring() { return mBlockSprintWhenFiring; }
 
-	/** Returns the assosiated hud object if there is one assigned */
-	UFUNCTION( BlueprintPure, Category = "Hud" )
-	FORCEINLINE AFGHUD* GetAssociatedHud() const { return mAssociatedHud; }
+protected:
+	virtual void HandleDefaultEquipmentActionEvent( EDefaultEquipmentAction action, EDefaultEquipmentActionEvent actionEvent ) override;
+	virtual bool IsEquipmentMontageTagAllowed_Implementation(FName montageTag) const override;
+
+	/** Input Actions */
+	void Input_Reload( const FInputActionValue& actionValue );
 
 public:
 	UPROPERTY( BlueprintAssignable )
@@ -210,13 +207,15 @@ public:
 protected:
 	// Begin AFGEquipment interface
 	virtual void AddEquipmentActionBindings() override;
+	virtual void OnCameraModeChanged_Implementation(ECameraMode newCameraMode) override;
 	// End AFGEquipment interface
 
 	void SetWeaponState(EWeaponState newState);
 
 	virtual void UpdateDispersion( float DeltaSeconds );
 
-	void SetMagazineMeshMaterials(USkeletalMeshComponent* skelMeshComp, UFGAmmoType* ammoTypeObject);
+	void SetMagazineMeshMaterials(USkeletalMeshComponent* skelMeshComp, UFGAmmoType* ammoTypeObject) const;
+	void UpdateMagazineMeshAttachment() const;
 
 	/** Try to refire */
 	void RefireCheckTimer();
@@ -266,10 +265,6 @@ protected:
 	void OnRep_CurrentAmmoCount();
 
 	virtual void OnRep_Instigator() override;
-
-	UPROPERTY()
-	AFGHUD* mAssociatedHud = nullptr;
-	//[DavalliusA:Wed/20-03-2019] the base hud object will never get invalid during use, so we can use anormal pointer here to access it.
 
 	/** Refire timer */
 	FTimerHandle mRefireCheckHandle;

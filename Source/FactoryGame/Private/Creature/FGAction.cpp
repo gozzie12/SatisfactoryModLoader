@@ -2,6 +2,8 @@
 
 #include "Creature/FGAction.h"
 
+DEFINE_LOG_CATEGORY(LogAction);
+
 TAutoConsoleVariable<int32> CVarActionDebug(TEXT("CVarActionDebug"), 0, TEXT(""));
 UFGAction::UFGAction(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer) {
 	this->mActionDescription = TEXT("");
@@ -21,7 +23,7 @@ UFGAction::UFGAction(const FObjectInitializer& ObjectInitializer) : Super(Object
 	this->mPostAction = nullptr;
 	this->mPawn = nullptr;
 	this->mController = nullptr;
-	this->mActionState = EFGActionState::Uninitialized;
+	this->mActionState = EFGActionState::EAS_Uninitialized;
 	this->mParentAction = nullptr;
 }
 void UFGAction::PostInitProperties(){ Super::PostInitProperties(); }

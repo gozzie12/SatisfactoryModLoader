@@ -3,9 +3,9 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "CoreMinimal.h"
-#include "Hologram/FGJumpPadHologram.h"
 #include "Buildables/FGBuildableJumppad.h"
+#include "CoreMinimal.h"
+#include "FGJumpPadHologram.h"
 
 #include "FGJumpPadLauncherHologram.generated.h"
 
@@ -37,17 +37,11 @@ public:
 	// Begin AFGHologram Interface
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
-	// End AFGHologram Interface
-
-	// Begin AFGHologram Interface
 	virtual void ScrollRotate( int32 delta, int32 step ) override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual bool DoMultiStepPlacement( bool isInputFromARelease ) override;
 	// End AFGHologram Interface
-
-	/** Net Construction Messages */
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-
+	
 protected:
 	UFUNCTION( BlueprintImplementableEvent, Category = "JumpPad" )
 	void OnLaunchAngleAdjusted();
@@ -70,27 +64,27 @@ protected:
 	UPROPERTY()
 	EJumpPadHologramBuildStep mBuildStep = EJumpPadHologramBuildStep::JPHBS_PlacementAndRotation;
 
-	UPROPERTY( VisibleAnywhere, ReplicatedUsing = OnRep_LaunchAngle )
+	UPROPERTY( VisibleAnywhere, ReplicatedUsing = OnRep_LaunchAngle, CustomSerialization )
 	int32 mLaunchAngle;
 
 	/** The part of the jump pad that angles up and down. */
-	UPROPERTY( VisibleAnywhere, Category = "Jump Pad" )
+	UPROPERTY( EditDefaultsOnly, Category = "Jump Pad" )
 	class UStaticMeshComponent* mLauncherMeshComponent;
 
 	/** The spline component for the trajectory. */
-	UPROPERTY( VisibleAnywhere, Category = "Trajectory" )
+	UPROPERTY( EditDefaultsOnly, Category = "Trajectory" )
 	class USplineComponent* mSplineComponent;
 
-	/** The instanced spline meshes for the trajectory. */
-	UPROPERTY( VisibleAnywhere, Category = "Trajectory" )
-	class UFGInstancedSplineMeshComponent* mInstancedSplineMeshComponent;
-
+	/** The spline meshes for the trajectory. */
+	UPROPERTY( Transient )
+	TArray<USplineMeshComponent*> mTrajectorySplineMeshComponents;
+	
 	/** The scale used for the instances in the spline mesh. */
 	UPROPERTY( EditDefaultsOnly, Category = "Trajectory" )
 	FVector mTrajectoryMeshScale;
 
 	/** The mesh that shows where launched objects will land. */
-	UPROPERTY( VisibleAnywhere, Category = "Trajectory" )
+	UPROPERTY( EditDefaultsOnly, Category = "Trajectory" )
 	class UStaticMeshComponent* mDestinationMeshComponent;
 
 	/** How high above the impact location the destination mesh will be. */

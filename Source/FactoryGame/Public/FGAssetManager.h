@@ -20,10 +20,13 @@ public:
 	virtual void SetCookParameters( const FString& commandlineValues ) override;
 
 	/** Convenient hook for when we want to be able to add more things to the cook */
-	virtual void ModifyCook( TArray<FName>& out_packagesToCook, TArray<FName>& out_packagesToNeverCook ) override;
+	virtual void ModifyCook( TConstArrayView<const ITargetPlatform*> TargetPlatforms, TArray<FName>& out_packagesToCook, TArray<FName>& out_packagesToNeverCook ) override;
 	
 	/** Let us exclude certain packages that we don't want to include */
 	virtual EPrimaryAssetCookRule GetPackageCookRule( FName PackageName ) const override;
+
+	// [ZolotukhinN:21/07/2023] Added this to make world partition content bundle system aware of the cooking parameters
+	FORCEINLINE EIncludeInBuilds GetMinimumIncludeInBuildFlag() const { return mMinimumIncludeInBuildFlag; }
 #endif
 protected:
 #if WITH_EDITORONLY_DATA

@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Hologram/FGVehicleHologram.h"
 #include "FGRailroadSubsystem.h"
+#include "FGVehicleHologram.h"
 #include "FGRailroadVehicleHologram.generated.h"
 
 /**
@@ -14,23 +14,21 @@ UCLASS()
 class FACTORYGAME_API AFGRailroadVehicleHologram : public AFGVehicleHologram
 {
 	GENERATED_BODY()
-	
 public:
-	/** Do all custom initialization from mBuildClass here. */
+	// Begin AActor interface
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
+	// End AActor interface
 
 	// Begin AFGHologram interface
 	virtual void ScrollRotate( int32 delta, int32 step ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
+	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	// End of AFGHologram interface
-
-	// Begin Net Construction Messages
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	// End of Net Construction Messages 
-
+	
 protected:
 	// Begin AFGHologram interface
-	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName ) override;
+	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName, const FName& attachSocketName ) override;
 	virtual void CheckValidPlacement() override;
 	// End of AFGHologram interface
 
@@ -51,10 +49,10 @@ private:
 	float mLength;
 
 	/** The track position for this hologram. If valid this vehicle has snapped to a track. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	FRailroadTrackPosition mTrackPosition;
 
 	/** The snapped vehicle. */
-	UPROPERTY()
+	UPROPERTY( CustomSerialization )
 	class AFGRailroadVehicle* mSnappedVehicle;
 };

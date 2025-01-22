@@ -2,12 +2,24 @@
 
 #include "FGColoredInstanceMeshProxy.h"
 
+bool UFGColoredInstanceMeshProxy::ShouldCreateRenderState() const {
+#if WITH_EDITOR // Ensure visibility in blueprint & editor.
+    if (GetWorld()->WorldType == EWorldType::Editor || GetWorld()->WorldType == EWorldType::EditorPreview) {
+        return true;
+    }
+#endif
+    // only create when its blocking instancing.
+    return mBlockInstancing;
+}
+
 UFGColoredInstanceMeshProxy::UFGColoredInstanceMeshProxy() : Super() {
 	this->mBlockInstancing = false;
+	this->mBlockInstancingWithLumen = false;
 	this->mBlockColoring = false;
 	this->mHasScalabilityMaterial = false;
 	this->mOptimizationCategory = EDistanceCullCategory::FGDDC_NEVERCULL;
 	this->mNumCustomDataFloats = 20;
+	this->WorldPositionOffsetDisableDistance = 5000;
 	this->PrimaryComponentTick.TickGroup = ETickingGroup::TG_DuringPhysics;
 	this->PrimaryComponentTick.EndTickGroup = ETickingGroup::TG_PrePhysics;
 	this->PrimaryComponentTick.bTickEvenWhenPaused = false;
@@ -16,22 +28,15 @@ UFGColoredInstanceMeshProxy::UFGColoredInstanceMeshProxy() : Super() {
 	this->PrimaryComponentTick.bAllowTickOnDedicatedServer = false;
 	this->PrimaryComponentTick.TickInterval = 0.0;
 }
-void UFGColoredInstanceMeshProxy::BeginPlay(){ }
+void UFGColoredInstanceMeshProxy::BeginPlay(){ Super::BeginPlay(); }
 void UFGColoredInstanceMeshProxy::OnRegister(){ Super::OnRegister(); }
 void UFGColoredInstanceMeshProxy::OnUnregister(){ Super::OnUnregister(); }
 void UFGColoredInstanceMeshProxy::SetCustomizationData(const FFactoryCustomizationData& customizationData){ }
 void UFGColoredInstanceMeshProxy::SetHasPowerData(float newHasPower){ }
 void UFGColoredInstanceMeshProxy::SetUserDefinedData(TArray<float> userData){ }
 void UFGColoredInstanceMeshProxy::SetInstanced(bool setToInstanced){ }
+void UFGColoredInstanceMeshProxy::OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport){ }
 void UFGColoredInstanceMeshProxy::OnHiddenInGameChanged(){ }
-bool UFGColoredInstanceMeshProxy::ShouldCreateRenderState() const {
-#if WITH_EDITOR // Ensure visibility in blueprint & editor.
-    if( GetWorld()->WorldType == EWorldType::Editor || GetWorld()->WorldType == EWorldType::EditorPreview)
-    {
-        return true;
-    }
-#endif    
-    // only create when its blocking instancing.
-    return mBlockInstancing;
-}
+bool UFGColoredInstanceMeshProxy::ShouldBlockInstancing() const{ return bool(); }
 void UFGColoredInstanceMeshProxy::InstantiateInternal(){ }
+void UFGColoredInstanceMeshProxy::PostLoad(){ Super::PostLoad(); }

@@ -8,6 +8,9 @@ FSkyAtmosphereSettings::FSkyAtmosphereSettings(){ }
 #if WITH_EDITOR
 void AFGAtmosphereVolume::PostEditChangeProperty(FPropertyChangedEvent& propertyChangedEvent){ Super::PostEditChangeProperty(propertyChangedEvent); }
 #endif 
+#if DEBUG_POST_PROCESS_VOLUME_ENABLE
+FString AFGAtmosphereVolume::GetDebugName() const{ return FString(); }
+#endif 
 #if WITH_EDITOR
 void AFGAtmosphereVolume::MoveCurvesToBaseBiome(){ }
 void AFGAtmosphereVolume::CopyLegacyPropertiesToAsset(){ }
@@ -196,7 +199,7 @@ AFGAtmosphereVolume::AFGAtmosphereVolume() : Super() {
 	this->mEnableExpandGamut = false;
 	this->mEnableSceneColorTint = false;
 }
-void AFGAtmosphereVolume::BeginPlay(){ }
+void AFGAtmosphereVolume::BeginPlay(){ Super::BeginPlay(); }
 void AFGAtmosphereVolume::PostLoad(){ Super::PostLoad(); }
 void AFGAtmosphereVolume::PostRegisterAllComponents(){ }
 void AFGAtmosphereVolume::PostUnregisterAllComponents(void){ }

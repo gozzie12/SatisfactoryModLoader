@@ -4,15 +4,15 @@
 
 #include "FactoryGame.h"
 #include "FGCharacterBase.h"
-#include "Creature/FGAction.h"
+#include "FGAction.h"
 #include "BehaviorTree/BehaviorTree.h"
-
+#include "NavMesh/RecastNavMesh.h"
 #include "FGCreature.generated.h"
 
 class AFGCreature;
 class AFGCreatureController;
 
-DECLARE_LOG_CATEGORY_EXTERN( LogCreature, Log, All );
+FACTORYGAME_API DECLARE_LOG_CATEGORY_EXTERN( LogCreature, Log, All );
 
 extern TAutoConsoleVariable< int32 > CVarCreatureDebug;
 extern TAutoConsoleVariable< int32 > CVarCreatureVisionDebug;
@@ -110,7 +110,7 @@ enum class ECreatureState : uint8
 
 inline FString CreatureStateEnumToString( ECreatureState state )
 {
-	const UEnum* EnumPtr = FindObject< UEnum >( ANY_PACKAGE, TEXT( "ECreatureState" ), true );
+	const UEnum* EnumPtr = FindObject< UEnum >( nullptr, TEXT( "/Script/FactoryGame.ECreatureState" ), true );
 
 	if( !EnumPtr )
 	{
@@ -235,6 +235,7 @@ public:
 	// Required for Actions/UObject replication
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void PreInitializeComponents() override;
 	virtual void PostInitializeComponents() override;
 	virtual void OnConstruction( const FTransform& Transform ) override;
@@ -242,6 +243,7 @@ public:
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty( FPropertyChangedEvent& PropertyChangedEvent ) override;
 	virtual bool IsSelectedInEditor() const override;
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const;
 #endif
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void UnPossessed() override;
@@ -260,6 +262,7 @@ public:
 
 	// Begin FGCharacterBase
 	virtual void Died( AActor* died ) override;
+	virtual void DoRagdoll_Internal() override;
 	// End FGCharacterBase
 
 	/** @return	Pawn's eye location */
@@ -325,12 +328,12 @@ public:
 	void OnArachnophobiaModeChanged( bool isArachnophobiaMode );
 
 	/** Notify when creature consumes a item*/
-	UFUNCTION( NetMulticast, BlueprintCallable, Unreliable, Category = "Consume" )
-	void Multicast_ConsumeItem( TSubclassOf< class UFGItemDescriptor > itemDescriptor, int32 amount = 1 );
+	UFUNCTION( NetMulticast, BlueprintCallable, Reliable, Category = "Consume" )
+	void Multicast_ConsumeItem( TSubclassOf< class UFGItemDescriptor > itemDescriptor, const class AFGPlayerController* playerController );
 
 	/** Play effects when creature consumes a item*/
 	UFUNCTION( BlueprintImplementableEvent, Category = "Consume" )
-	void PlayConsumeItemEffect( TSubclassOf< class UFGItemDescriptor > itemDescriptor, int32 amount );
+	void PlayConsumeItemEffect( TSubclassOf< UFGItemDescriptor > itemDescriptor, const AFGPlayerController* playerController );
 
 	/** Updates the movement speed ( server side ) */
 	UFUNCTION( BlueprintCallable, Category = "Movement" )
@@ -424,6 +427,9 @@ public:
 	UFUNCTION( BlueprintPure, Category = "AI" )
 	TSubclassOf< class UFGCreatureFamily > GetCreatureFamily() const { return mCreatureFamily; }
 
+	UFUNCTION( BlueprintPure, Category = "AI" )
+	ANavigationData* GetCreatureNavData() const;
+	
 	UFUNCTION( BlueprintPure, Category = "Creature" )
 	TArray< TSubclassOf<UFGItemDescriptor> > GetCreatureFood() const { return mCreatureFood; }
 
@@ -476,6 +482,9 @@ public:
 	UFUNCTION( BlueprintImplementableEvent, Category = "Creature" )
 	bool IsTamed();
 
+	UFUNCTION( BlueprintCallable, BlueprintPure )
+	int GetAmountToEatWhenTamed() const { return mAmountToEatWhenTamed; }
+	
 protected:
 	UFUNCTION()
     void OnRep_IsEnabled();
@@ -718,8 +727,18 @@ private:
 
 	/** Timer responsible for ending the stun. */
 	FTimerHandle mStunTimerHandle;
+	
+	UPROPERTY( EditDefaultsOnly )
+	int mAmountToEatWhenTamed = 0;
+	
+	UPROPERTY( EditDefaultsOnly )
+	float mDefaultRotationRate = 90;
 
+	UPROPERTY( EditDefaultsOnly )
+	float mCombatRotationRate = 360;
+	
 #ifdef WITH_EDITOR
 	mutable bool mPreviousSelected;
-#endif	
+#endif
+	int32 mCachedAgentIndex;
 };

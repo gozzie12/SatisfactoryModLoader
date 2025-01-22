@@ -2,6 +2,7 @@
 
 #include "FGManta.h"
 #include "Components/SceneComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AFGManta::AFGManta() : Super() {
 	this->mCachedSpline = nullptr;
@@ -32,7 +33,7 @@ void AFGManta::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFGManta, mCurrentTime);
 }
-void AFGManta::BeginPlay(){ }
-void AFGManta::EndPlay(const EEndPlayReason::Type endPlayReason){ }
+void AFGManta::BeginPlay(){ Super::BeginPlay(); }
+void AFGManta::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 void AFGManta::UpdateManta(){ }
-void AFGManta::Tick(float DeltaTime){ }
+void AFGManta::Tick(float DeltaTime){ Super::Tick(DeltaTime); }

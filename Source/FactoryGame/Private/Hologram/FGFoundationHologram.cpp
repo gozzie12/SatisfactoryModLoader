@@ -9,11 +9,12 @@ AFGFoundationHologram::AFGFoundationHologram() : Super() {
 	this->mAllowCornerRotationMode = false;
 	this->mBuildModeVerticalZoop = nullptr;
 	this->mMaxPlacementFloorAngle = 85.0;
+	this->mAllowEdgePlacementInDesignerEvenOnIntersect = true;
 }
-void AFGFoundationHologram::BeginPlay(){ }
+void AFGFoundationHologram::BeginPlay(){ Super::BeginPlay(); }
 void AFGFoundationHologram::SetHologramLocationAndRotation(const FHitResult& hitResult){ }
 bool AFGFoundationHologram::TrySnapToActor(const FHitResult& hitResult){ return bool(); }
-void AFGFoundationHologram::GetSupportedBuildModes_Implementation(TArray<TSubclassOf<UFGHologramBuildModeDescriptor>>& out_buildmodes) const{ }
+void AFGFoundationHologram::GetSupportedBuildModes_Implementation(TArray<TSubclassOf<UFGBuildGunModeDescriptor>>& out_buildmodes) const{ }
 int32 AFGFoundationHologram::GetRotationStep() const{ return int32(); }
 bool AFGFoundationHologram::CanSnapVertically( AFGBuildableFoundation* toFoundation, float dirZ) const{ return bool(); }
 void AFGFoundationHologram::UpdateZoop(){ }

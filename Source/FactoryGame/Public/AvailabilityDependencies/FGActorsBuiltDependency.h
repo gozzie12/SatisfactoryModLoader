@@ -4,7 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "AvailabilityDependencies/FGAvailabilityDependency.h"
+#include "FGAvailabilityDependency.h"
+#include "Templates/SubclassOf.h"
 #include "FGActorsBuiltDependency.generated.h"
 
 UENUM( BlueprintType )
@@ -18,7 +19,7 @@ enum class EActorBuiltDependencyType : uint8
 /**
 * Dependency that's met if we have built the given amount of actors
 */
-UCLASS()
+UCLASS( Blueprintable, abstract )
 class FACTORYGAME_API UFGActorsBuiltDependency : public UFGAvailabilityDependency
 {
 	GENERATED_BODY()
@@ -27,13 +28,19 @@ public:
 	bool AreDependenciesMet( UObject* worldContext ) const override;
 
 	TMap< TSubclassOf< class AActor >, int32 > GetActorsBuiltCount() const { return mActorsBuiltCount; }
+	EActorBuiltDependencyType GetType() const { return mType; }
+
+#if WITH_EDITOR
+	virtual FString ToString() const override;
+	virtual void FromString( const FString& inString ) override;
+#endif
 
 protected:
 	/** The amount of the given actors that should have been built for this dependency to be met */
-	UPROPERTY( EditDefaultsOnly )
+	UPROPERTY( EditDefaultsOnly, Category="Dependency" )
 	TMap< TSubclassOf< class AActor >, int32 > mActorsBuiltCount;
 
 	/** The type of build action this dependency cares about */
-	UPROPERTY( EditDefaultsOnly )
+	UPROPERTY( EditDefaultsOnly, Category="Dependency" )
 	EActorBuiltDependencyType mType;
 };

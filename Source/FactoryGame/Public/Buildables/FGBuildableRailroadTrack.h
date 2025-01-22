@@ -3,14 +3,15 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildable.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
-#include "FGInstancedSplineMeshComponent.h"
+#include "FGBuildable.h"
 #include "FGRailroadSignalBlock.h"
 #include "FGSplineBuildableInterface.h"
+#include "InstancedSplineMeshComponent.h"
 #include "FGBuildableRailroadTrack.generated.h"
 
+class USplineComponent;
 
 /**
  * This is a way to represent a position on the railroad.
@@ -31,6 +32,12 @@ public:
 	/** Function called when serializing this struct to a FArchive. */
 	bool Serialize( FArchive& ar );
 	friend FArchive& operator<<( FArchive& ar, FRailroadTrackPosition& item );
+	
+	/**
+	 * Custom as we need this struct to have replication atomicity.
+	 * Note: The track might still be invalid on the client if it is not relevant.
+	 */
+	bool NetSerialize( FArchive& ar, UPackageMap* map, bool& out_success );
 
 	/** Is this a valid track position. */
 	FORCEINLINE bool IsValid() const { return Track.IsValid(); }
@@ -78,7 +85,8 @@ struct TStructOpsTypeTraits< FRailroadTrackPosition > : public TStructOpsTypeTra
 {
 	enum
 	{
-		WithSerializer = true
+		WithSerializer = true,
+		WithNetSerializer = true
 	};
 };
 
@@ -103,21 +111,31 @@ public:
 	// Begin IFGDismantleInterface
 	virtual void Dismantle_Implementation() override;
 	virtual bool CanDismantle_Implementation() const override;
+	virtual void GetDismantleDependencies_Implementation(TArray<AActor*>& out_dismantleDependencies) const override;
+	virtual bool SupportsDismantleDisqualifiers_Implementation() const override { return true; }
+	virtual void GetDismantleDisqualifiers_Implementation(TArray<TSubclassOf<UFGConstructDisqualifier>>& out_dismantleDisqualifiers, const TArray<AActor*>& allSelectedActors) const override;
 	// End IFGDismantleInterface
+
+	// Begin Save Interface
+	virtual void PostLoadGame_Implementation(int32 saveVersion, int32 gameVersion) override;
+	// End Save Interface
 
 	// Begin Buildable interface
 	virtual int32 GetDismantleRefundReturnsMultiplier() const override;
 	virtual bool ShouldBeConsideredForBase_Implementation() override { return false; }
+	virtual void GetClearanceData_Implementation( TArray< FFGClearanceData >& out_data ) const override;
+	virtual bool ShouldBlockGuidelinePathForHologram( const class AFGHologram* hologram ) const override;
 	// End Buildable interface
 
-	/** Get the spline for this track. */
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Railroad|Track" )
-	class USplineComponent* GetSplineComponent() const { return mSplineComponent; }
-
+	// Begin abstract instance interface.
+	virtual TArray<FInstanceData> GetActorLightweightInstanceData_Implementation() override;
+	virtual bool DoesContainLightweightInstances_Native() const override { return true; }
+	// End abstract instance interface
+	
 	/** Show/hide the block color on this track. */
 	void ShowBlockVisualization();
 	void StopBlockVisualization();
-	bool IsBlockVisualizationActive() const { return mBlockVisualizationSplineMeshComponent.IsValid(); }
+	bool IsBlockVisualizationActive() const { return mBlockVisualizationSplineMeshComponents.Num() > 0; }
 	bool CanShowBlockVisualization() const { return mSignalBlockID != INDEX_NONE; }
 
 	/** Get the length of this track. */
@@ -139,6 +157,16 @@ public:
 	 * Get a location and rotation given a train position.
 	 */
 	void GetWorldLocationAndDirectionAtPosition( const struct FRailroadTrackPosition& position, FVector& out_location, FVector& out_direction ) const;
+
+	/**
+	 * Get a location and rotation given a distance along the track.
+	 */
+	void GetWorldLocationAndDirectionAtDistance( float distance, FVector& out_location, FVector& out_direction ) const;
+
+	/**
+	 * Splits the track in 2 at the specified offset.
+	 */
+	static TArray< AFGBuildableRailroadTrack* > Split( AFGBuildableRailroadTrack* track, float offset, bool connectNewTracks );
 
 	/**
 	 * Get the connection at offset.
@@ -200,20 +228,24 @@ public:
 	void AddOverlappingTrack( AFGBuildableRailroadTrack* track );
 
 	// Begin IFGSplineBuildableInterface
-	TArray< FSplinePointData > GetSplinePointData() { return mSplineData; };
-	float GetMeshLength() { return mMeshLength; }
-	FVector GetCollisionExtent() override { return COLLISION_EXTENT; }
-	float GetCollisionSpacing() override { return COLLISION_SPACING; }
-	FVector GetCollisionOffset() override { return COLLISION_OFFSET; }
-	UStaticMesh* GetUsedSplineMesh() override { return mMesh; }
+	virtual UFGConnectionComponent* GetSplineConnection0() const override;
+	virtual UFGConnectionComponent* GetSplineConnection1() const override;
+	virtual const TArray< FSplinePointData >& GetSplinePointData() const override { return mSplineData; };
+	virtual TArray<FSplinePointData>* GetMutableSplinePointData() override { return &mSplineData; }
+	virtual float GetMeshLength() const override { return mMeshLength; }
+	virtual UStaticMesh* GetSplineMesh() const override { return mMesh; }
+	virtual USplineComponent* GetSplineComponent() const override { return mSplineComponent; }
 	// End IFGSplineBuildableInterface
+
+	virtual void PostSerializedFromBlueprint(bool isBlueprintWorld) override;
+	void UnrotateForBlueprintPlaced();
+
+	static void CreateClearanceData( class USplineComponent* splineComponent, const TArray< FSplinePointData >& splineData, const FTransform& trackTransform, TArray< FFGClearanceData >& out_clearanceData, float maxDistance = -1.0f );
 	
-	FORCEINLINE UStaticMesh* GetMesh() const { return mMesh; }
-
-
 private:
 	void SetTrackGraphID( int32 trackGraphID );
 	void SetSignalBlock( TWeakPtr< FFGRailroadSignalBlock > block );
+	void SetupConnections();
 
 	UFUNCTION()
 	void OnRep_SignalBlockID();
@@ -226,7 +258,7 @@ protected:
 	/** Length of the mesh to use for this track */
 	UPROPERTY( EditDefaultsOnly, Category = "Track" )
 	float mMeshLength;
-
+	
 private:
 	friend class AFGRailroadTrackHologram;
 	friend class AFGRailroadSubsystem;
@@ -235,9 +267,6 @@ private:
 	UPROPERTY( VisibleAnywhere, Category = "Spline" )
 	class USplineComponent* mSplineComponent;
 
-	/** The spline meshes for this train track. */
-	UPROPERTY( VisibleAnywhere, Category = "Spline" )
-	class UFGInstancedSplineMeshComponent* mInstancedSplineComponent;
 
 	/** Spline data saved in a compact form for saving and replicating. All the vectors are in local space. */
 	UPROPERTY( SaveGame, Replicated, Meta = (NoAutoJson = true) )
@@ -276,12 +305,19 @@ private:
 	UPROPERTY( ReplicatedUsing = OnRep_SignalBlockID, VisibleAnywhere, Category = "Track" )
 	int32 mSignalBlockID;
 
-	/** The instance spline mesh component dynamic spawned when needed to preview feedback. */
-	TWeakObjectPtr< UFGInstancedSplineMeshComponent > mBlockVisualizationSplineMeshComponent;
+	/** The spline mesh components dynamic spawned when needed to preview feedback. */
+	TArray< TObjectPtr< USplineMeshComponent > > mBlockVisualizationSplineMeshComponents;
 
 	/* Mesh to use for block feedback. */
 	UPROPERTY( EditDefaultsOnly, Category = "Track|Block Visualization" )
 	UStaticMesh* mBlockVisualizationMesh;
+
+	/** First index of the Custom Data used for the block visualization color. It will use 3 custom data floats for R/G/B channels of the color */
+	UPROPERTY( EditDefaultsOnly, Category = "Track|Block Visualization" )
+	int32 mBlockVisualizationColorDataStartIndex;
+
+	/** Clearance data generated upon request for this track. */
+	TArray< FFGClearanceData > mCachedClearanceData;
 
 	// Collision Constants. These used to be magic numbers in the .cpp but were moved here so they could be accessed via the SplineBuildableInterface
 	static inline const FVector COLLISION_EXTENT = FVector( 200.f, 300.f, 30.f );

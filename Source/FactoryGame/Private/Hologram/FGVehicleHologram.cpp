@@ -4,13 +4,12 @@
 
 AFGVehicleHologram::AFGVehicleHologram() : Super() {
 	this->mDefaultSwatch = nullptr;
-	this->mSoftClearanceOverlapResponse = EHologramSoftClearanceResponse::HSCR_Block;
 }
 void AFGVehicleHologram::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 }
-void AFGVehicleHologram::BeginPlay(){ }
+void AFGVehicleHologram::BeginPlay(){ Super::BeginPlay(); }
 AActor* AFGVehicleHologram::Construct(TArray< AActor* >& out_children, FNetConstructionID netConstructionID){ return nullptr; }
 void AFGVehicleHologram::SetHologramLocationAndRotation(const FHitResult& hitResult){ }
 void AFGVehicleHologram::CheckValidPlacement(){ }

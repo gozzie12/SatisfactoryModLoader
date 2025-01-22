@@ -6,6 +6,8 @@
 #include "Resources/FGItemDescriptor.h"
 #include "FGMaterialEffect_Build.h"
 #include "FGSettings.h"
+#include "Curves/CurveFloat.h"
+#include "Styling/SlateBrush.h"
 #include "FGFactorySettings.generated.h"
 
 USTRUCT(BlueprintType)
@@ -135,6 +137,38 @@ public:
 	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Connections" )
 	class UStaticMesh* mDefaultPowerConnectionMesh;
 
+	/** Mesh used to visualize forward direction of blueprints. @note Do not set in code! */
+    UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+    class UStaticMesh* mBlueprintDirectionIndicatorMesh;
+
+	/** Material for blueprint direction indicator. @note Do not set in code! */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	class UMaterialInstance* mBlueprintDirectionIndicatorMaterial;
+
+	/** Minimum scale of the blueprint direction indicator mesh. */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	float mBlueprintDirectionMeshScale;
+
+	/** How much forward offset to add to the blueprint direction indicator. */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	float mBlueprintDirectionMeshForwardOffset;
+	
+	/** How much vertical offset to add to the blueprint direction indicator. */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	float mBlueprintDirectionMeshHeightOffset;
+
+	/** How much to rotate the blueprint direction indicator (degrees). */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	float mBlueprintDirectionMeshRotation;
+
+	/** Whether or not to put the direction mesh indicator on the ground. */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	bool mBlueprintDirectionMeshPlaceOnGround;
+
+	/** Material for blueprint proxies. @note Do not set in code! */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Blueprints" )
+	class UMaterialInstance* mBlueprintProxyMaterial;
+
 	/** Mesh used to visualize the clearance mesh on factories @note Do not set in code! */
 	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Clearance" )
 	class UStaticMesh* mClearanceMesh;
@@ -142,10 +176,6 @@ public:
 	/** Material on hologram for clearance. @note Do not set in code! */
 	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Clearance" )
 	class UMaterialInstance* mClearanceMaterial;
-
-	/** Material for blueprint proxies. @note Do not set in code! */
-	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Clearance" )
-	class UMaterialInstance* mBlueprintProxyMaterial;
 
 	/** Default sound loop placed on holograms. */
 	UPROPERTY( EditDefaultsOnly, Category = "Hologram|Sound" )
@@ -163,6 +193,14 @@ public:
 	UPROPERTY( EditDefaultsOnly, Category = "BuildGuides|Alignment" )
 	float mBuildGuideWidth;
 	
+	/** Default color of building buidelines for input connections */
+	UPROPERTY( EditDefaultsOnly, Category = "BuildGuides|Alignment" )
+	FColor mGuidelineColorInput;
+
+	/** Default color of building buidelines for output connections */
+    UPROPERTY( EditDefaultsOnly, Category = "BuildGuides|Alignment" )
+    FColor mGuidelineColorOutput;
+	
 	/** Material applied to build guides to visualize alignment in build mode. @note Do not set in code! */
 	UPROPERTY( EditDefaultsOnly, Category = "BuildGuides|Alignment" )
 	class UMaterialInstance* mBuildGuideMaterial;
@@ -170,10 +208,6 @@ public:
 	/** Crate spawned when we dismantle an actor or when we die. It will be filled with the refund if it doesn't fit in the players inventory. */
 	UPROPERTY( EditDefaultsOnly, Category = "Buildable" )
 	TSubclassOf< class AFGCrate > mInventoryDropCrate;
-
-	/** The default class we use for over clocking buildings */
-	UPROPERTY( EditDefaultsOnly, Category = "Buildable" )
-	TSubclassOf< class UFGItemDescriptor > mPowerShardClass;
 
 	/** Default sound played when constructing a building, a random from the list is played. */
 	UPROPERTY( EditDefaultsOnly, Category = "Buildable|Build Effect" )
@@ -249,14 +283,14 @@ public:
 	/** The number of hotbars */
 	UPROPERTY( EditDefaultsOnly, Category = "Shortcuts" )
 	int32 mNumHotbars;
-
-	/** The max number of preset hotbars */
-	UPROPERTY( EditDefaultsOnly, Category = "Shortcuts" )
-	int32 mNumPresetHotbars;
-
-	/** The number of starting hot bars */
+	
+	/** The number of slots per hot bar */
 	UPROPERTY( EditDefaultsOnly, Category = "Shortcuts" )
 	int32 mNumSlotsPerHotbar;
+
+	/** The number of slots per hot bar on consoles */
+	UPROPERTY(EditDefaultsOnly, Category = "Shortcuts")
+	int32 mNumSlotsPerHotbarOnConsoles;
 
 	// Default rate of converting FluidBox content into inventory stacks. Measured in Liters / Second
 	UPROPERTY( EditDefaultsOnly, Category = "Pipes" )
@@ -277,5 +311,21 @@ public:
 	*/
 	UPROPERTY( EditDefaultsOnly, Category = "Pipes" )
 	TArray< FViscosityToPuddlePair > mViscosityToPuddlePairs;
+
+	/** Material Param Collection containing the panini settings so scaling can be exposed to the Settings Menu */
+	UPROPERTY( EditDefaultsOnly, Category = "Rendering" )
+	class UMaterialParameterCollection* mPaniniProjectionCollection;
+
+	/** How the snapping threshold is affected over distance between a hologram and a snapping target. */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category= "Hologram|Alignment" )
+	FRuntimeFloatCurve mGuidelineSnappingDistanceThresholdCurve;
+
+	/** How misaligned a guideline is allowed to be in order to be displayed. In CM. */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category= "Hologram|Alignment" )
+	float mGuidelineDisplayDistanceThreshold;
+
+	/** How misaligned a guideline is allowed to be between two connections. In degress. */
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category= "Hologram|Alignment" )
+	float mGuidelineConnectionAngleThreshold;
 
 };

@@ -19,7 +19,6 @@ public:
 	AFGBuildableResourceSink();
 
 	// Begin AActor interface
-	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 	virtual void BeginPlay() override;
 	virtual void Tick( float dt ) override;
 	virtual void Destroyed() override;
@@ -29,7 +28,7 @@ public:
 	virtual void Factory_CollectInput_Implementation() override;
 	bool CanProduce_Implementation() const override;
 	// End BuildableFactoryInterface
-
+	
 	/** Get the inventory where we store coupons for this resource sink */
 	UFUNCTION( BlueprintPure, Category = "Resource Sink" )
 	FORCEINLINE class UFGInventoryComponent* GetCouponInventory() const { return mCouponInventory; }
@@ -46,9 +45,9 @@ public:
 	void ReturnUnclaimedCoupons();
 
 private:
-	UPROPERTY( VisibleDefaultsOnly, SaveGame, Replicated, Category = "Resource Sink" )
+	UPROPERTY( VisibleDefaultsOnly, SaveGame, Category = "Resource Sink" )
 	class UFGInventoryComponent* mCouponInventory;
-
+	
 	/** Cached factory input connections */
 	UPROPERTY( Transient )
 	TArray<class UFGFactoryConnectionComponent*> mFactoryInputConnections;

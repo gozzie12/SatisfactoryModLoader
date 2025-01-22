@@ -2,6 +2,7 @@
 
 #include "Buildables/FGBuildableLightSource.h"
 #include "FGPowerInfoComponent.h"
+#include "Net/UnrealNetwork.h"
 
 void UFGLightSourceClipboardRCO::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -26,8 +27,8 @@ void AFGBuildableLightSource::GetLifetimeReplicatedProps(TArray< FLifetimeProper
 	DOREPLIFETIME(AFGBuildableLightSource, mHasPower);
 	DOREPLIFETIME(AFGBuildableLightSource, mIsDay);
 }
-void AFGBuildableLightSource::BeginPlay(){ }
-void AFGBuildableLightSource::EndPlay(const EEndPlayReason::Type EndPlayReason){ }
+void AFGBuildableLightSource::BeginPlay(){ Super::BeginPlay(); }
+void AFGBuildableLightSource::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 bool AFGBuildableLightSource::GetPoolHandleInitialState() const{ return bool(); }
 UFGFactoryClipboardSettings* AFGBuildableLightSource::CopySettings_Implementation(){ return nullptr; }
 bool AFGBuildableLightSource::PasteSettings_Implementation(UFGFactoryClipboardSettings* settings){ return bool(); }
@@ -36,9 +37,11 @@ void AFGBuildableLightSource::OnBuildEffectFinished(){ }
 void AFGBuildableLightSource::SetLightEnabled(bool isEnabled){ }
 void AFGBuildableLightSource::SetLightControlData(FLightSourceControlData data){ }
 bool AFGBuildableLightSource::IsLightEnabled() const{ return bool(); }
+bool AFGBuildableLightSource::ShouldLightBeOn() const{ return bool(); }
 FLightSourceControlData AFGBuildableLightSource::GetLightControlData() const{ return FLightSourceControlData(); }
 void AFGBuildableLightSource::OnLightColorSlotsUpdated(const TArray< FLinearColor >& colors){ }
 float AFGBuildableLightSource::GetEmissivePower(){ return float(); }
+bool AFGBuildableLightSource::HasSufficientPowerConnection() const{ return bool(); }
 void AFGBuildableLightSource::OnTimeOfDayChanged(bool isDay){ }
 void AFGBuildableLightSource::OnHasPowerChanged( UFGPowerInfoComponent* info){ }
 void AFGBuildableLightSource::OnRep_IsEnabled(){ }

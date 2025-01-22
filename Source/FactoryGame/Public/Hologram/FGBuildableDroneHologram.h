@@ -6,7 +6,7 @@
 #include "CoreMinimal.h"
 
 
-#include "Hologram/FGVehicleHologram.h"
+#include "FGVehicleHologram.h"
 #include "FGBuildableDroneHologram.generated.h"
 
 /**
@@ -29,6 +29,7 @@ public:
 	// Begin AFGHologram interface
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void GetIgnoredClearanceActors( TArray< AActor* >& ignoredActors ) const override;
+	virtual void CheckValidPlacement() override;
 	// End of AFGHologram interface
 
 protected:

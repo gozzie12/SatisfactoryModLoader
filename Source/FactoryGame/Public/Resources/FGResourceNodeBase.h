@@ -3,13 +3,14 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Replication/FGStaticReplicatedActor.h"
-#include "FGSaveInterface.h"
-#include "Resources/FGResourceDescriptor.h"
-#include "Resources/FGExtractableResourceInterface.h"
-#include "FGUseableInterface.h"
 #include "FGActorRepresentationInterface.h"
+#include "FGClearanceInterface.h"
+#include "FGExtractableResourceInterface.h"
+#include "FGResourceDescriptor.h"
+#include "FGSaveInterface.h"
 #include "FGSignificanceInterface.h"
+#include "FGUseableInterface.h"
+#include "Replication/FGStaticReplicatedActor.h"
 #include "FGResourceNodeBase.generated.h"
 
 /** Enum that specifies what type of a resource node this is. Used mostly for simplify UI work and not having to look/cast specific classes. */
@@ -34,7 +35,7 @@ class FACTORYGAME_API UFGUseState_NonConveyorResource : public UFGUseState
 };
 
 UCLASS( Abstract )
-class FACTORYGAME_API AFGResourceNodeBase : public AFGStaticReplicatedActor, public IFGExtractableResourceInterface, public IFGUseableInterface, public IFGSaveInterface, public IFGSignificanceInterface /*, public IFGActorRepresentationInterface*/
+class FACTORYGAME_API AFGResourceNodeBase : public AFGStaticReplicatedActor, public IFGExtractableResourceInterface, public IFGUseableInterface, public IFGSaveInterface, public IFGSignificanceInterface, public IFGClearanceInterface /*, public IFGActorRepresentationInterface*/
 {
 	GENERATED_BODY()
 	
@@ -72,22 +73,35 @@ public:
 	// End IFSaveInterface
 
 	// Begin IFGUseableInterface
-	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) const override;
+	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) override;
 	virtual bool IsUseable_Implementation() const override { return true; }
 	virtual FText GetLookAtDecription_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) const override;
 	// End IFGUseableInterface
 
 	// Begin IFGExtractableResourceInterface
+	UFUNCTION()
 	virtual void SetIsOccupied( bool occupied ) override;
+	UFUNCTION()
 	virtual bool IsOccupied() const override;
+	UFUNCTION()
 	virtual bool CanBecomeOccupied() const override;
+	UFUNCTION()
 	virtual TSubclassOf< UFGResourceDescriptor > GetResourceClass() const override;
+	UFUNCTION()
 	virtual FVector GetPlacementLocation( const FVector& hitLocation ) const override;
+	UFUNCTION()
 	virtual bool HasAnyResources() const override { return false; }
+	UFUNCTION()
 	virtual int32 ExtractResource( int32 amount ) override { return 0; }
+	UFUNCTION()
 	virtual float GetExtractionSpeedMultiplier() const override { return 0; }
+	UFUNCTION()
 	virtual bool CanPlaceResourceExtractor() const override { return false; }
 	// End IFGExtractableResourceInterface
+
+	// Begin IFGClearanceInterface
+	virtual void GetClearanceData_Implementation( TArray< FFGClearanceData >& out_data ) const override;
+	// End IFGClearanceInterface
 
 	// Begin IFGActorRepresentationInterface
 	// virtual bool AddAsRepresentation() override;
@@ -123,11 +137,7 @@ public:
 
 	/** Let the client know when we changed. mIsOccupied */
 	UFUNCTION()
-	void OnRep_IsOccupied();
-
-	/** Used to update representation state depending on if node is revealed by radar tower and scanner */
-	UFUNCTION()
-	void OnRep_MapReveals();
+	virtual void OnRep_IsOccupied();
 
 	/** Let's blueprint know that we have changed occupied states */
 	UFUNCTION( BlueprintImplementableEvent, Category = "Resources" )
@@ -149,15 +159,13 @@ public:
 	
 	/** Used by the descriptor, so that all meshes in the world can get their mesh updated */
 	void UpdateMeshFromDescriptor( bool needRegister = true );
-
-	void ScanResourceNode_Replicated();
+	
 	void ScanResourceNode_Local( float lifeSpan );
-
-	UFUNCTION()
-	void RemoveResourceNodeScan_Replicated();
 	UFUNCTION()
 	void RemoveResourceNodeScan_Local();
-	
+
+	void ScanResourceNodeScan_Server();
+	void RemoveResourceNodeScan_Server();
 protected:
 	/** @returns the actor that contains the mesh for this node */
 	UFUNCTION( BlueprintPure, Category = "Resources" )
@@ -174,6 +182,8 @@ protected:
 
 	void UpdateHighlightParticleSystem();
 
+	UFUNCTION()
+	void OnRep_ServerMapReveals();
 private:
 	void UpdateNodeRepresentation();
 
@@ -188,22 +198,18 @@ protected:
 
 	/** If we have no static mesh but a decal, then we use this for collision*/
 	UPROPERTY( BlueprintReadOnly, VisibleDefaultsOnly, Category = "Resources" )
-	UBoxComponent* mBoxComponent;
+	class UBoxComponent* mBoxComponent;
 
 	/** If true, then we are occupied by something // [Dylan 3/2/2020] - Removed savegame meta */
 	UPROPERTY( ReplicatedUsing = OnRep_IsOccupied, BlueprintReadOnly, Category = "Resources" )
 	bool mIsOccupied;
 
-	/** Objects that scanned this resource node. Used to keep track of when to add/remove node from map */
-	UPROPERTY( Transient )
-	TArray< UObject* > mRevealedOnMapBy;
-
-	/** Number of times this node is revealed on server by radar towers. Used to keep track of when to add/remove node from map */
-	UPROPERTY( Transient, ReplicatedUsing = OnRep_MapReveals )
-	uint8 mReplicatedMapReveals;
-
 	/** Number of times this node is revealed locally by resource scanner. Used to keep track of when to add/remove node from map */
 	int32 mLocalMapReveals;
+
+	/** Number of times this node is revealed by the radar towers. Also forces the node to replicate it's data regardless of distance to the player */
+	UPROPERTY( ReplicatedUsing = OnRep_ServerMapReveals )
+	int32 mServerMapReveals;
 
 	UPROPERTY( Transient )
 	class UFGResourceNodeRepresentation* mResourceNodeRepresentation;
@@ -229,6 +235,10 @@ public:
 	bool mDoSpawnParticle;
 
 private:
+	/** Clearance data of this resource */
+	UPROPERTY( EditDefaultsOnly, Category = "Resources" )
+	TArray< FFGClearanceData > mClearanceData;
+	
 	/** The actor that contains the mesh for this node */
 	UPROPERTY( EditInstanceOnly, Category = "Resources" )
 	TSoftObjectPtr< class AActor > mMeshActor;

@@ -4,8 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildableControlPanelHost.h"
-#include "Buildables/FGBuildableLightSource.h"
+#include "FGBuildableControlPanelHost.h"
+#include "FGBuildableLightSource.h"
 #include "FGBuildableLightsControlPanel.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FLightControlPanelStateChanged, bool, isEnabled );
@@ -61,5 +61,6 @@ private:
 
 	/** Are the lights on or off. */
 	UPROPERTY( SaveGame, ReplicatedUsing=OnRep_IsEnabled )
-	bool mIsEnabled;
+	bool mIsEnabled = true;
+	
 };

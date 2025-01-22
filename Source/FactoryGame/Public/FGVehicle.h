@@ -13,6 +13,7 @@
 #include "FGDockableInterface.h"
 #include "FGColorInterface.h"
 #include "FGBuildableSubsystem.h"
+#include "FGClearanceInterface.h"
 #include "FGVehicle.generated.h"
 
 class UFGDamageType;
@@ -67,6 +68,17 @@ public:
 	UFGUseState_VehicleOccupied() : Super() { mIsUsableState = false; }
 };
 
+/**
+ * UseState representing the WorkBench.
+ */
+UCLASS()
+class FACTORYGAME_API UFGUseState_WorkBench : public UFGUseState
+{
+	GENERATED_BODY()
+public:
+	UFGUseState_WorkBench() : Super() { mIsUsableState = true; }
+};
+
 USTRUCT()
 struct FACTORYGAME_API FVehicleSeat
 {
@@ -109,7 +121,7 @@ struct FACTORYGAME_API FVehicleSeat
  * Base class for all vehicles in the game, cars, train etc.
  */
 UCLASS()
-class FACTORYGAME_API AFGVehicle : public AFGDriveablePawn, public IFGUseableInterface, public IFGDismantleInterface, public IFGDockableInterface, public IFGColorInterface, public IFGSignificanceInterface
+class FACTORYGAME_API AFGVehicle : public AFGDriveablePawn, public IFGUseableInterface, public IFGDismantleInterface, public IFGDockableInterface, public IFGColorInterface, public IFGSignificanceInterface, public IFGClearanceInterface
 {
 	GENERATED_BODY()
 public:
@@ -146,10 +158,20 @@ public:
 	virtual float GetSignificanceRange() override;
 	//End IFGSignificanceInterface
 
-	float GetJumpPadForceMultiplier() const { return mJumpPadForceMultiplier; }
+	// Begin IFGClearanceInterface
+    virtual void GetClearanceData_Implementation( TArray< FFGClearanceData >& out_data ) const override;
+    // End IFGClearanceInterface
 
+	float GetJumpPadForceMultiplier() const { return mJumpPadForceMultiplier; }
+	
+	virtual void OnBuildEffectFinished();
+	virtual void OnDismantleEffectFinished();
+	virtual void ExecuteBuildEffect();
+	void TurnOffAndDestroy();
+	void PlayDismantleEffects();
+	
 	//~ Begin IFGColorInterface
-	void SetCustomizationData_Native( const FFactoryCustomizationData& customizationData );
+	void SetCustomizationData_Native( const FFactoryCustomizationData& customizationData, bool skipCombine = false );
 	void SetCustomizationData_Implementation( const FFactoryCustomizationData& colorData );
 	void ApplyCustomizationData_Native( const FFactoryCustomizationData& customizationData );
 	FFactoryCustomizationData& GetCustomizationData_Native() { return mCustomizationData; }
@@ -178,11 +200,10 @@ public:
 	//~ End IFGDockableInterface
 
 	//~ Begin IFGUseableInterface
-	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) const override;
+	virtual void UpdateUseState_Implementation( class AFGCharacterPlayer* byCharacter, const FVector& atLocation, class UPrimitiveComponent* componentHit, FUseState& out_useState ) override;
 	virtual void OnUse_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual void OnUseStop_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual bool IsUseable_Implementation() const override;
-	virtual void StartIsLookedAt_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state  ) override;
 	virtual void StopIsLookedAt_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) override;
 	virtual FText GetLookAtDecription_Implementation( class AFGCharacterPlayer* byCharacter, const FUseState& state ) const override;
 	virtual void RegisterInteractingPlayer_Implementation( class AFGCharacterPlayer* player ) override;
@@ -191,7 +212,7 @@ public:
 
 	//~ Begin IFGDismantleInterface
 	virtual bool CanDismantle_Implementation() const override;
-	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund ) const override;
+	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund, bool noBuildCostEnabled ) const override;
 	virtual FVector GetRefundSpawnLocationAndArea_Implementation( const FVector& aimHitLocation, float& out_radius ) const override;
 	virtual void PreUpgrade_Implementation() override;
 	virtual void Upgrade_Implementation( AActor* newActor ) override;
@@ -199,8 +220,16 @@ public:
 	virtual void StartIsLookedAtForDismantle_Implementation( AFGCharacterPlayer* byCharacter ) override;
 	virtual void StopIsLookedAtForDismantle_Implementation( AFGCharacterPlayer* byCharacter ) override;
 	virtual void GetChildDismantleActors_Implementation( TArray< AActor* >& out_ChildDismantleActors ) const override;
+	virtual FText GetDismantleDisplayName_Implementation(AFGCharacterPlayer* byCharacter) const override;
+	virtual bool SupportsDismantleDisqualifiers_Implementation() const override { return true; }
+	virtual void GetDismantleDisqualifiers_Implementation(TArray<TSubclassOf<UFGConstructDisqualifier>>& out_dismantleDisqualifiers, const TArray<AActor*>& allSelectedActors) const override;
 	//~ End IFGDismantleInferface
 
+	void SetBuildEffectInstigator(AActor* Actor) { mBuildEffectInstigator = Actor; }
+	
+	UFUNCTION( Reliable, NetMulticast )
+	virtual void NetMulticast_Dismantle();
+	
 	/** Getter for simulation distance */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Vehicle" )
 	FORCEINLINE float GetSimulationDistance() const { return mSimulationDistance; }
@@ -211,8 +240,11 @@ public:
 
 	/** Called in Construct from the hologram. */
 	void SetBuiltWithRecipe( TSubclassOf< class UFGRecipe > recipe ) { mBuiltWithRecipe = recipe; }
+	
 	/** Getter for the built with recipe. */
 	FORCEINLINE TSubclassOf< class UFGRecipe > GetBuiltWithRecipe() const { return mBuiltWithRecipe; }
+	TSubclassOf< class UFGItemDescriptor > GetBuiltWithDescriptor() const;
+	template< class C > TSubclassOf< C > GetBuiltWithDescriptor() const { return *GetBuiltWithDescriptor(); }
 
 	/** Can this vehicle be sampled for the build gun */
 	virtual bool CanBeSampled();
@@ -307,21 +339,31 @@ public:
 	UFUNCTION( BlueprintNativeEvent, Category = "Buildable|Customization" )
 	void OnSkinCustomizationApplied( TSubclassOf< class UFGFactoryCustomizationDescriptor_Skin > skin );
 
-	virtual FVector GetRealActorLocation() const;
+	virtual FVector GetVehicleRealActorLocation() const;
 
+	/** Returns true if we are submerged in water */
+	UFUNCTION( BlueprintPure )
+	bool IsSubmergedInWater() const;
+
+	void SetOwningPlayerState( class AFGPlayerState* playerState );
+
+	void SetMatchCustomizationWithPlayerState( bool shouldMatch );
+	
 protected:
 	/** Called when customization data is applied. Allows child vehicles to update their simulated vehicles to keep colors synced */
 	virtual void OnCustomizationDataApplied( const FFactoryCustomizationData& customizationData );
-	
+
+	/** Called when customization data gets set. */
+	virtual void OnCustomizationDataSet( const FFactoryCustomizationData& previousData );
+
 private:
 	/** Rep notifies */
 	UFUNCTION()
 	void OnRep_IsSimulated();
 
+	void ToggleEntireVehicleOutline( const bool isOutlined, const EOutlineColor& outlineColor );
+	
 protected:
-	DECLARE_EVENT( AFGWheeledVechicle, FIsSimulatedChanged );
-	FIsSimulatedChanged IsSimulatedChangedEvent;
-
 	/** Updates the vehicles settings depending on if it should be simulated or "real" */
 	virtual void OnIsSimulatedChanged() {}
 
@@ -352,9 +394,7 @@ protected:
 	/** Update if we are submerged in water, SERVER ONLY */
 	void UpdateSubmergedInWater( float deltaTime );
 	/** Our status of being submerged in water has updated */
-	void SubmergedInWaterUpdated( bool newIsSubmerged );
-	/** Returns true if we are submerged in water */
-	bool IsSubmergedInWater() const;
+	virtual void SubmergedInWaterUpdated( bool newIsSubmerged );
 
 	/** How much do we get back when selling this vehicle. Not consolidated. */
 	void GetDismantleRefundReturns( TArray< FInventoryStack >& out_returns ) const;
@@ -388,6 +428,14 @@ private:
 	UFUNCTION()
 	void OnRep_CustomColorData();
 
+	UFUNCTION()
+	void OnRep_OwningPlayerState( class AFGPlayerState* previousPlayerState );
+
+	UFUNCTION()
+	void OnPlayerCustomizationDataChanged( const struct FPlayerCustomizationData& newCustomizationData );
+
+	void UpdateCustomizationDataFromPlayerState();
+
 public:
 	/** Name of the MeshComponent. Use this name if you want to prevent creation of the component (with ObjectInitializer.DoNotCreateDefaultSubobject). */
 	static FName VehicleMeshComponentName;
@@ -403,7 +451,7 @@ public:
 	/** Hologram to build this class with. */
 	UPROPERTY( EditDefaultsOnly, Category = "Vehicle" )
 	TSubclassOf< class AFGHologram > mHologramClass;
-
+	
 protected:
 	/** The main skeletal mesh associated with this Vehicle */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Vehicle", meta = ( AllowPrivateAccess = "true" ) )
@@ -440,11 +488,32 @@ protected:
 
 	UPROPERTY( EditAnywhere, BlueprintReadWrite, Category = "Vehicle" )
 	TSubclassOf< class UFGSwatchGroup > mSwatchGroup;
+	
+	UPROPERTY( BlueprintReadWrite )
+	USkeletalMeshComponent* mOptionalWorkBenchComponent = nullptr;
 
-private:
+	UPROPERTY( BlueprintReadWrite )
+	class UBoxComponent* mOptionalWorkBenchBox = nullptr;
+
 	/** Recipe this vehicle was built with, e.g. used for refunds and stats. */
 	UPROPERTY( SaveGame, Replicated )
 	TSubclassOf< class UFGRecipe > mBuiltWithRecipe;
+
+	UPROPERTY( Replicated, meta = ( NoAutoJson = true ) )
+	AActor* mBuildEffectInstigator;
+
+	/** The player state that "owns" this vehicle. */
+	UPROPERTY( SaveGame, ReplicatedUsing = OnRep_OwningPlayerState )
+	class AFGPlayerState* mOwningPlayerState;
+
+	/** Whether or not to match customization data with the player that "owns" the vehicle.  */
+	UPROPERTY( EditDefaultsOnly, SaveGame, Replicated, Category = "Vehicle" )
+	bool mMatchCustomizationDataWithPlayerState;
+
+private:
+	/** Clearance data of this vehicle. */
+	UPROPERTY( EditDefaultsOnly, Category = "Vehicle" )
+	TArray< FFGClearanceData > mClearanceData;
 
 	/** If this vehicle is self driving. */
 	UPROPERTY( Replicated )
@@ -476,6 +545,9 @@ private:
 	UPROPERTY( Replicated )
 	uint8 mIsSubmergedInWater:1;
 
+	/** Amount of time in seconds that have passed since this vehicle has been last submerged */
+	float timeBeforeCanStopBeingSubmerged = 0.0f;
+
 	/** base damping forces to revert to in case a vehicle is no longer submerged */
 	float mBaseAngularDamping;
 	float mBaseLinearDamping;
@@ -486,9 +558,6 @@ private:
 	/** increased linear damping when vehicle is under water */
 	UPROPERTY( EditDefaultsOnly, Category = "Vehicle" )
 	float mSubmergedLinearDamping;
-	/** upwards force applied to vehicles when underwater */
-	UPROPERTY( EditDefaultsOnly, Category = "Vehicle" )
-	float mSubmergedBouyantForce;
 
 	/** Damage types that should be redirected to the driver. Damages here act as damage multipliers (i.e setting it to gas damage with 0.5 damage will x0.5 the incoming damages */
 	UPROPERTY( EditDefaultsOnly, Category= "Vehicle" )
@@ -506,7 +575,13 @@ private:
 
 	/* Forces vehicle to be in real mode */
 	bool mForceRealMode;
-
+	
+	UPROPERTY()
+	class UFGMaterialEffect_Build* mActiveBuildEffect;
+	
+	/** Flag for whether the build effect is active */
+	uint8 mBuildEffectIsPlaying : 1;
+	
 protected:
 	/** Is the movement being simulated? */
 	UPROPERTY( ReplicatedUsing = OnRep_IsSimulated, SaveGame )
@@ -523,11 +598,16 @@ protected:
 	/** Range after we disable simulation (remove collision) */
 	UPROPERTY( EditDefaultsOnly, Category = "Vehicle" )
 	float mSimulationDistance;
-
+	
 public:
 	UPROPERTY( EditDefaultsOnly, Category = "Representation" )
 	class UTexture2D* mActorRepresentationTexture;
 
+	UPROPERTY( EditDefaultsOnly, Category = "Representation" )
+	UMaterialInterface* mActorRepresentationCompassMaterial;
+
 	UPROPERTY( EditDefaultsOnly, Replicated, Category = "Representation" )
 	FText mMapText;
+
+	bool IsPlayingBuildEffect() const { return mBuildEffectIsPlaying; }
 };

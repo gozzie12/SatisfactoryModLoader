@@ -65,11 +65,16 @@ public:
 	// Begin AActor interface
 	virtual void BeginPlay() override;
 	virtual void Tick( float dt ) override;
+	virtual void PossessedBy( AController* newController ) override;
+	virtual void UnPossessed() override;
 	// End AActor interface
 
 	// Begin ADriveablePawn/AFGVehicle interface
 	virtual bool DriverEnter( class AFGCharacterPlayer* driver ) override;
 	virtual bool DriverLeave( bool keepDriving = false ) override;
+	virtual void AddInputBindings( UInputComponent* inputComponent ) override;
+	virtual bool CanLeaveVehicle( AFGCharacterPlayer* character ) override;
+	virtual void UpdatePlayerStatus() override;
 	// End ADriveablePawn/AFGVehicle interface
 		
 	// Begin ARailroadVehicle interface
@@ -149,6 +154,8 @@ public:
 	 * @return true if the headlights are on, otherwise false.
 	 */
 	ELocomotiveHeadlightsMode::Type GetHeadlightsMode() const { return mHeadlightMode; }
+
+	void OpenLocomotiveMenu();
 	
 protected:
 	/** Called from tick if train is significant. */
@@ -162,6 +169,28 @@ protected:
 	/** Called when the player releases the horn input. (Called on server and client) */
 	UFUNCTION( BlueprintImplementableEvent )
     void OnHonkEnd();
+
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Railroad|Locomotive" )
+	bool IsInputEnabled() const;
+
+	/** Input Actions */
+	UFUNCTION()
+	void Input_ThrottleAxis_Started( const FInputActionValue& actionValue );
+	
+	UFUNCTION()
+	void Input_ThrottleAxis( const FInputActionValue& actionValue );
+
+	UFUNCTION()
+	void Input_SteerAxis( const FInputActionValue& actionValue );
+	
+	UFUNCTION()
+	void Input_Handbrake( const FInputActionValue& actionValue );
+
+	UFUNCTION()
+	void Input_Honk( const FInputActionValue& actionValue );
+	
+	UFUNCTION()
+	void Input_OpenLocomotiveMenu( const FInputActionValue& actionValue );
 	
 private:
 	/** Used by the movement component to control the power usage. */
@@ -177,6 +206,13 @@ private:
 public:
 	/** Name of the VehicleMovement. Use this name if you want to use a different class (with ObjectInitializer.SetDefaultSubobjectClass). */
 	static FName VehicleMovementComponentName;
+	
+	/** Delegates for the replication graph so it can setup dependencies. Only called on the server. */
+	DECLARE_MULTICAST_DELEGATE_TwoParams( FOnLocomotivePossessedBy, AFGLocomotive*, AController* );
+	DECLARE_MULTICAST_DELEGATE_TwoParams( FOnLocomotiveUnPossessed, AFGLocomotive*, AController* );
+	
+	static FOnLocomotivePossessedBy OnPossessedBy;
+	static FOnLocomotiveUnPossessed OnUnPossessed;
 
 private:
 	/** The power consumption of this electric locomotive, min is idle power consumption and max is power consumption at maximum torque. */
@@ -188,7 +224,7 @@ private:
 	class UFGPowerConnectionComponent* mSlidingShoe;
 
 	/** The power info for this train, draw power from the circuit. */
-	UPROPERTY( Replicated )
+	UPROPERTY()
 	class UFGPowerInfoComponent* mPowerInfo;
 
 	/** Has power. Used to keep clients in sync with circuit power state */
@@ -211,4 +247,8 @@ private:
 	 */
 	UPROPERTY( EditDefaultsOnly, Category = Vehicle )
 	FHeadlightParams mHeadlightModes[ ELocomotiveHeadlightsMode::LHM_MAX ];
+
+	/** The widget that is shown when player interact with the locomotive from inside the locomotive, Train scheduler etc. */
+	UPROPERTY( EditDefaultsOnly, Category = Vehicle )
+	TSoftClassPtr<UFGInteractWidget> mLocomotiveMenuWidgetClass;
 };

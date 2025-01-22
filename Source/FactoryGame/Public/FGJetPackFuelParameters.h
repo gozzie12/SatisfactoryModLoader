@@ -8,12 +8,11 @@
 #include "UObject/Object.h"
 #include "FGJetPackFuelParameters.generated.h"
 
-UCLASS( Blueprintable, Abstract )
-class FACTORYGAME_API UFGJetPackFuelParameters : public UObject
+UCLASS( BlueprintType )
+class FACTORYGAME_API UFGJetPackFuelParameters : public UDataAsset
 {
 	GENERATED_BODY()
-protected:
-	friend class AFGJetPack;
+public:
 	
 	/** How much to add to Z velocity when Thrusting. */
 	UPROPERTY( EditDefaultsOnly, Category = "JetPack")
@@ -39,22 +38,17 @@ protected:
 	/** How much of the full tank is 1 Fuel worth. */
 	UPROPERTY( EditDefaultsOnly, Category = "JetPack" )
 	float mFuelWorth = 0.5f;
-	/** How often to make the noise (in seconds) while the jetpack is active. */
-	UPROPERTY( EditDefaultsOnly, Category = "JetPack" )
-	float mActiveNoiseFrequency = 0.2f;
-	/** The noise to make when the jetpack is active. */
-	UPROPERTY( EditDefaultsOnly, Category = "JetPack" )
-	TSubclassOf< class UFGNoise > mActiveNoise;
 	/** The maximum amount of fuel in the JetPack */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "JetPack")
 	float mMaxFuel = 1.0f;
-	/** Adjusted air control (in character movement) while thrusting. */
-	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "JetPack" )
+	/**
+	 * Adjusted air control (in character movement) while thrusting.
+	 * NOTE: The name is misleading, the extended air control is applied at all times when the JetPack is equipped and has fuel, not just when it is thrusting.
+	 **/
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "JetPack", DisplayName = "mAirControl" )
 	float mThrustAirControl = 0.3f;
-
-
+	
 	// Reference to Fuel Type Desc class.
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "JetPack" )
 	TSubclassOf< UFGItemDescriptor > mFuelTypeDesc; 
-	
 };

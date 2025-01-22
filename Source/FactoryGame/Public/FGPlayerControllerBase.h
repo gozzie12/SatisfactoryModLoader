@@ -3,9 +3,9 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Online.h"
 #include "FGInputLibrary.h"
 #include "PlayerPresenceState.h"
+#include "GameFramework/PlayerController.h"
 #include "FGPlayerControllerBase.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnInputChanged );
@@ -20,7 +20,6 @@ public:
 	// Begin AActor interface
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 	virtual void BeginPlay() override;
-	virtual bool ReplicateSubobjects(class UActorChannel *Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags) override;
 	// End AActor interface
 
 	// Begin APlayerController interface
@@ -56,20 +55,9 @@ public:
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Input" )
 	void FlushPressedKeys();
 
-	/** Used for rebinding keys */
+	/** Flushes the mouse button keys */
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Input" )
-	bool RebindActionKey( FFGKeyMapping newKeyMapping );
-
-	/** Removes custom bindings and restores to default */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Input" )
-	void ResetInputBindings();
-
-	/** Inject the input that was rebinded and remove old default */
-	void UpdatePlayerInput();
-
-	/** Triggered when we update the gamepad input enabled option */
-	UFUNCTION()
-	void OnGamepadInputEnabledUpdated( FString updatedCvar );
+	void FlushMouseKeys();
 
 	/** Triggered when we update the mouse sensitivity option */
 	UFUNCTION()
@@ -106,8 +94,11 @@ public:
 	float GetDefaultMouseSensitivityY();
 
 	/** Returns readable name for an action */
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Input" )
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Input", meta = ( DeprecatedFunction, DeprecationMessage = "Use FGInpuLibrary::FormatStringWithInputActionNames or FGInpuLibrary::GetInputActionNameAsText" ) )
 	FText GetKeyNameForAction( FName inAction, bool getGamepadKey );
+
+	/** Returns the name for the key bound to the "use" action */
+	FText GetKeyNameForUseAction();
 
 	UFUNCTION( BlueprintNativeEvent, Category="FactoryGame|Online|Presence") 
 	FString GetPresenceString() const;
@@ -135,17 +126,15 @@ public:
 	UFUNCTION(exec)
 	void Admin( const FString& command );
 
-	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerAdmin( const FString& command );
-
+	UFUNCTION( Server, Reliable )
+	void Server_Admin( const FString& command );
+	
 	/** @return the admin interface if we are logged in as server admin */
 	UFUNCTION(BlueprintPure, Category="FactoryGame|Online|Admin")
 	FORCEINLINE class AFGAdminInterface* GetAdminInterface() const { return mAdminInterface; }
 
 	// This is valid on both server and client if cheats are allowed
 	FORCEINLINE class UFGCheatManager* GetCheatManager() const { return mReplicatedCheatManager; }
-
-	virtual bool ProcessConsoleExec( const TCHAR* Cmd, FOutputDevice& Ar, UObject* Executor ) override;
 
 	/** Returns the most relevant save manager. This will be the local save manager in the main menu, the server save manager when playing on a server and authenticated as admin, or null when playing on a server without admin privilege */
 	UFUNCTION( BlueprintCallable, Category = "Utility")
@@ -162,8 +151,8 @@ protected:
 	virtual void SetPlayer(UPlayer* InPlayer);
 	virtual void OnNetCleanup(class UNetConnection* Connection) override;
 
-	UPROPERTY( BlueprintReadOnly )
-	class UFGServerObject* mCurrentServer = nullptr;
+	// UPROPERTY( BlueprintReadOnly )
+	// class UFGServerObject* mCurrentServer = nullptr;
 private:
 	/** 
 	 * Enables or disables the input for all ActionBindings except for the ones specified in mAllowedInputWhenDead.
@@ -176,9 +165,11 @@ private:
 	void EnablePlayerInput( bool enable );
 
 	void SetCurrentServer( class UFGServerObject* CurrentServer );
-private:
-	/** Setup the input component that filters out the input that's used when dead */
-	void InitDeathInput();
+
+	UFUNCTION()
+	void OnRep_ReplicatedCheatManager();
+
+	void InitDefaultCheats();
 
 private:
 	/** Admin interface if we have one available */
@@ -186,20 +177,8 @@ private:
 	class AFGAdminInterface* mAdminInterface;
 
 	/** If we are allowed to cheat, then we replicate the cheat manager */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing=OnRep_ReplicatedCheatManager)
 	class UFGCheatManager* mReplicatedCheatManager;
-
-	/** The input component used when we want to disable our input */
-	UPROPERTY()
-	class UInputComponent* mDisableInputComponent;
-
-	/** The input component used when we want to enable our input */
-	UPROPERTY()
-	class UInputComponent* mEnableInputComponent;
-
-	/** Input that's allowed when you are dead */
-	UPROPERTY( EditDefaultsOnly, Category = "Input" )
-	TArray<FName> mAllowedInputWhenDead;
 
 	/** If true, the our input is enabled */
 	uint8 mInputEnabled:1;

@@ -4,12 +4,14 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "FGBuildable.h"
+#include "FGBuildableSignBase.h"
 #include "FGSignInterface.h"
-#include "FGSignificanceInterface.h"
-#include "Buildables/FGBuildable.h"
 #include "FGSignTypes.h"
-#include "Buildables/FGBuildableSignBase.h"
+#include "FGSignificanceInterface.h"
 #include "FGBuildableWidgetSign.generated.h"
+
+class UTextureRenderTarget2D;
 
 UCLASS()
 class FACTORYGAME_API UFGSignClipboardSettings : public UFGFactoryClipboardSettings
@@ -19,7 +21,28 @@ public:
 	
 	UPROPERTY( BlueprintReadWrite )
 	FPrefabSignData mPrefabSignData;
-	
+};
+
+/** Helper to convert legacy save data into the new format without having to load the widget class object */
+USTRUCT()
+struct FACTORYGAME_API FFGSignPrefabLayoutWidgetConversionHelper
+{
+	GENERATED_BODY()
+
+	/** Converted prefab layout widget. */
+	UPROPERTY( SaveGame )
+	TSoftClassPtr<UFGSignPrefabWidget> PrefabLayoutWidget;
+
+	bool SerializeFromMismatchedTag(const FPropertyTag& PropertyTag, FArchive& Ar);
+};
+
+template<>
+struct TStructOpsTypeTraits<FFGSignPrefabLayoutWidgetConversionHelper> : TStructOpsTypeTraitsBase2<FFGSignPrefabLayoutWidgetConversionHelper>
+{
+	enum 
+	{
+		WithSerializeFromMismatchedTag = true
+	};
 };
 
 /**
@@ -70,6 +93,7 @@ public:
 	//~ End IFGFactoryClipboardInterface
 
 	virtual void OnBuildEffectFinished() override;
+	virtual void OnBuildEffectActorFinished() override;
 	
 	// When a text element is updated, this call will update that element and set the save data
 	UFUNCTION( BlueprintCallable, Category = "WidgetSign" )
@@ -77,10 +101,12 @@ public:
 
 	// When a text element is updated, this call will update that element and set the save data
 	UFUNCTION( BlueprintPure, Category = "WidgetSign" )
-	void GetSignPrefabData( FPrefabSignData& out_signData );
+	void GetSignPrefabData( FPrefabSignData& out_signData ) const;
 
 	/** Updates all sign elements with currently set sign data */
 	void UpdateSignElements( FPrefabSignData& prefabSignData );
+
+	virtual float GetAdjustedEmissiveValue(int32 Level) const;
 
 protected:
 
@@ -88,12 +114,34 @@ protected:
 	UFUNCTION()
 	void OnRep_SignDataDirty();
 
+	/* Generate GUID based on settings*/
+	static uint32 GenerateGUID(FPrefabSignData& signData, UClass* Prefab, FVector2D Size);
+
+	virtual void ConvertToEmissiveOnly(FPrefabSignData& prefabSignData) const;
+
+	virtual void SetupMaterialInstanceForProxyPlane(UMaterialInstanceDynamic* Instance, UTextureRenderTarget2D* RenderTarget);
+
+	static bool IsEmissiveOnly( FPrefabSignData& prefabSignData, const TSubclassOf<UFGSignPrefabWidget>& activePrefabLayout );
+	bool ShouldPrefabSignTick( FPrefabSignData& prefabSignData ) const;
+	UMaterialInterface* GetBackground( FPrefabSignData& prefabSignData ) const;
+
+	void WaitForClientSubsystemsToInitializeSignPrefabData();
+	void InitializeSignPrefabData();
+
+	virtual void PreSerializedToBlueprint() override;
+	virtual void PostSerializedToBlueprint() override;
+	virtual void PostSerializedFromBlueprint(bool isBlueprintWorld) override;
 protected:
 	friend class UFGSignBuildingWidget;
+	friend class AFGSignSubsystem;
 
-	/** Root UMG component */
-	UPROPERTY( VisibleAnywhere, Category = "WidgetSign" )
-	class UWidgetComponent* mWidgetComponent;
+
+	///** Root UMG component */
+	//UPROPERTY( VisibleAnywhere, Category = "WidgetSign" )
+	//class UWidgetComponent* mWidgetComponent;
+	
+	UPROPERTY( VisibleAnywhere, Category = "WidgetSign", meta = (AllowPrivateAccess = "true") )
+	TObjectPtr<UStaticMeshComponent> mSignProxyPlane;
 
 	/** Sign Descriptor. This is a class that holds information that can be shared across different signs of similar aspect ratios */
 	UPROPERTY( EditDefaultsOnly, Category = "WidgetSign" )
@@ -111,6 +159,10 @@ protected:
 	UPROPERTY()
 	TMap< FString, FString > mTextElementToDataMap;
 
+	/** Map of text element name to the string data stored */
+	UPROPERTY()
+	TMap< FString, FText > mTextElementToLocDataMap;
+
 	/** Map of icon element name to the icon data index */
 	UPROPERTY()
 	TMap< FString, int32 > mIconElementToDataMap;
@@ -118,18 +170,38 @@ protected:
 	UPROPERTY( EditDefaultsOnly )
 	UMaterialInterface* mWidgetMaterial;
 
+	UPROPERTY( EditDefaultsOnly )
+	UMaterialInterface* mEmissiveOnlySignMaterial;
+	
+	UPROPERTY( EditDefaultsOnly )
+	UMaterialInterface* mDefaultSignMaterial;
+
+	UPROPERTY(EditDefaultsOnly)
+	FIntPoint mSignDrawSize;
+
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UUserWidget> mWidgetClass;
+	
 	//////////////////////////////////////////////////////////////////////////
 	/// Saved Properties
 
-	/** Currently Active Sign Prefab Class */
+	/** A path to the currently active sign prefab widget class. Stored as a soft pointer to avoid having to load it on the dedicated server. */
 	UPROPERTY( SaveGame )
-	TSubclassOf< UFGSignPrefabWidget > mActivePrefabLayout;
+	TSoftClassPtr<UFGSignPrefabWidget> mSoftActivePrefabLayout;
+
+	/** Helper for reading legacy save data for signs */
+	UPROPERTY( SaveGame )
+	FFGSignPrefabLayoutWidgetConversionHelper mActivePrefabLayout_DEPRECATED;
 
 	UPROPERTY( SaveGame )
-	TArray< FPrefabTextElementSaveData > mPrefabTextElementSaveData;
+	TArray<FPrefabTextElementSaveData> mPrefabTextElementSaveData;
 
 	UPROPERTY( SaveGame )
-	TArray< FPrefabIconElementSaveData > mPrefabIconElementSaveData;
+	TArray<FPrefabIconElementSaveData> mPrefabIconElementSaveData;
+
+	/** Used instead of mPrefabIconElementSaveData to save Icon ID globally for blueprints */
+	UPROPERTY( SaveGame )
+	TArray<FGlobalPrefabIconElementSaveData> mGlobalPrefabIconElementSaveData;
 
 	UPROPERTY( SaveGame )
 	FLinearColor mForegroundColor;
@@ -149,5 +221,6 @@ protected:
 	// When a signs data is changed, the server will increment this. When the onRep fires the client will add this sign to the PendingSigns array in the sign subsystem
 	UPROPERTY( ReplicatedUsing=OnRep_SignDataDirty )
 	uint8 mDataVersion;
-
+	
+	uint32 mCachedGUID = 0;
 };

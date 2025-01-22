@@ -3,17 +3,13 @@
 #include "Buildables/FGBuildableRailroadSwitchControl.h"
 #include "Components/SceneComponent.h"
 #include "FGColoredInstanceMeshProxy.h"
+#include "Net/UnrealNetwork.h"
 
 AFGBuildableRailroadSwitchControl::AFGBuildableRailroadSwitchControl() : Super() {
 	this->mSwitchComponent = CreateDefaultSubobject<UFGColoredInstanceMeshProxy>(TEXT("Switch Component"));
 	this->mControlledConnection = nullptr;
-	this->PrimaryActorTick.TickGroup = ETickingGroup::TG_PrePhysics;
-	this->PrimaryActorTick.EndTickGroup = ETickingGroup::TG_PrePhysics;
-	this->PrimaryActorTick.bTickEvenWhenPaused = false;
-	this->PrimaryActorTick.bCanEverTick = false;
-	this->PrimaryActorTick.bStartWithTickEnabled = false;
-	this->PrimaryActorTick.bAllowTickOnDedicatedServer = true;
-	this->PrimaryActorTick.TickInterval = 0.0;
+	this->mSignificanceRange = 75000.0;
+	this->NetDormancy = ENetDormancy::DORM_Awake;
 	this->mSwitchComponent->SetupAttachment(RootComponent);
 }
 void AFGBuildableRailroadSwitchControl::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const {
@@ -22,11 +18,19 @@ void AFGBuildableRailroadSwitchControl::GetLifetimeReplicatedProps(TArray<FLifet
 	DOREPLIFETIME(AFGBuildableRailroadSwitchControl, mSwitchData);
 	DOREPLIFETIME(AFGBuildableRailroadSwitchControl, mVisualState);
 }
-void AFGBuildableRailroadSwitchControl::BeginPlay(){ }
-void AFGBuildableRailroadSwitchControl::Destroyed(){ }
+void AFGBuildableRailroadSwitchControl::BeginPlay(){ Super::BeginPlay(); }
+void AFGBuildableRailroadSwitchControl::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 void AFGBuildableRailroadSwitchControl::OnBuildEffectFinished(){ }
+void AFGBuildableRailroadSwitchControl::OnBuildEffectActorFinished(){ }
+void AFGBuildableRailroadSwitchControl::GainedSignificance_Implementation(){ }
+void AFGBuildableRailroadSwitchControl::LostSignificance_Implementation(){ }
+void AFGBuildableRailroadSwitchControl::GainedSignificance_Native(){ }
+void AFGBuildableRailroadSwitchControl::LostSignificance_Native(){ }
+void AFGBuildableRailroadSwitchControl::SetupForSignificance(){ }
+bool AFGBuildableRailroadSwitchControl::ShouldBlockDismantleSample_Implementation() const{ return bool(); }
 bool AFGBuildableRailroadSwitchControl::CanDismantle_Implementation() const{ return bool(); }
-void AFGBuildableRailroadSwitchControl::UpdateUseState_Implementation( AFGCharacterPlayer* byCharacter, const FVector& atLocation,  UPrimitiveComponent* componentHit, FUseState& out_useState) const{ }
+void AFGBuildableRailroadSwitchControl::Dismantle_Implementation(){ }
+void AFGBuildableRailroadSwitchControl::UpdateUseState_Implementation( AFGCharacterPlayer* byCharacter, const FVector& atLocation,  UPrimitiveComponent* componentHit, FUseState& out_useState){ }
 void AFGBuildableRailroadSwitchControl::OnUse_Implementation( AFGCharacterPlayer* byCharacter, const FUseState& state){ }
 void AFGBuildableRailroadSwitchControl::OnUseStop_Implementation( AFGCharacterPlayer* byCharacter, const FUseState& state){ }
 bool AFGBuildableRailroadSwitchControl::IsUseable_Implementation() const{ return bool(); }
@@ -36,6 +40,7 @@ void AFGBuildableRailroadSwitchControl::StopIsLookedAt_Implementation( AFGCharac
 void AFGBuildableRailroadSwitchControl::ToggleSwitchPosition(){ }
 void AFGBuildableRailroadSwitchControl::OnSwitchPositionChanged(int32 newPosition, int32 numPositions){ }
 void AFGBuildableRailroadSwitchControl::SetControlledConnection( UFGRailroadTrackConnectionComponent* controlledConnection){ }
+void AFGBuildableRailroadSwitchControl::OnRep_ControlledConnection(){ }
 void AFGBuildableRailroadSwitchControl::OnRep_VisualState(){ }
 void AFGBuildableRailroadSwitchControl::UpdateVisuals(){ }
 void AFGBuildableRailroadSwitchControl::ApplyVisualState(int16 state){ }

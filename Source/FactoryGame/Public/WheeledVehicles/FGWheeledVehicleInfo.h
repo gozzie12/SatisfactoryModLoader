@@ -5,8 +5,7 @@
 #include "FactoryGame.h"
 #include "FGActorRepresentationInterface.h"
 #include "Animation/SkeletalMeshActor.h"
-#include "FGSaveInterface.h" // MODDING EDIT
-#include "WheeledVehicles/FGWheeledVehicle.h" // MODDING EDIT
+#include "FGWheeledVehicle.h"
 #include "FGWheeledVehicleInfo.generated.h"
 
 UENUM( BlueprintType )
@@ -41,24 +40,45 @@ public:
 	// End IFSaveInterface
 
 	// Begin IFGActorRepresentationInterface
+	UFUNCTION()
 	virtual bool AddAsRepresentation() override;
+	UFUNCTION()
 	virtual bool UpdateRepresentation() override;
+	bool UpdateRepresentation_Local();
+	UFUNCTION()
 	virtual bool RemoveAsRepresentation() override;
+	UFUNCTION()
 	virtual bool IsActorStatic() override;
+	UFUNCTION()
 	virtual FVector GetRealActorLocation() override;
+	UFUNCTION()
 	virtual FRotator GetRealActorRotation() override;
+	UFUNCTION()
 	virtual class UTexture2D* GetActorRepresentationTexture() override;
+	UFUNCTION()
 	virtual FText GetActorRepresentationText() override;
+	UFUNCTION()
 	virtual void SetActorRepresentationText( const FText& newText ) override;
+	UFUNCTION()
 	virtual FLinearColor GetActorRepresentationColor() override;
+	UFUNCTION()
 	virtual void SetActorRepresentationColor( FLinearColor newColor ) override;
+	UFUNCTION()
 	virtual ERepresentationType GetActorRepresentationType() override;
+	UFUNCTION()
 	virtual bool GetActorShouldShowInCompass() override;
+	UFUNCTION()
 	virtual bool GetActorShouldShowOnMap() override;
+	UFUNCTION()
 	virtual EFogOfWarRevealType GetActorFogOfWarRevealType() override;
+	UFUNCTION()
 	virtual float GetActorFogOfWarRevealRadius() override;
+	UFUNCTION()
 	virtual ECompassViewDistance GetActorCompassViewDistance() override;
+	UFUNCTION()
 	virtual void SetActorCompassViewDistance( ECompassViewDistance compassViewDistance ) override;
+	UFUNCTION()
+	virtual UMaterialInterface* GetActorRepresentationCompassMaterial() override;
 	// End IFGActorRepresentationInterface
 
 	// Begin AActor interface
@@ -75,15 +95,19 @@ public:
 	/**
 	 * Initializes a few members that govern vehicle collision detection.
 	 */
-	void InitCollisionData( class UFGVehicleCollisionBoxComponent* collisionBox );
+	void InitCollisionData();
 
 	// Accessors and change delegates
 
-	class AFGWheeledVehicle* GetVehicle() const;
+	AFGWheeledVehicle* GetVehicle() const;
+	AFGWheeledVehicle* GetVehicleOnClient_MayReturnNull() const;
 
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FStatusChanged, EVehicleStatus, status );
 	UPROPERTY( BlueprintAssignable, Category = "Vehicle", DisplayName = "OnVehicleStatusChanged" )
 	FStatusChanged VehicleStatusChangedDelegate;
+
+	UPROPERTY()
+	UMaterialInterface* mCompassMaterialInstance;
 
 	/**
 	 * Set deadlocked/out-of-fuel status
@@ -133,7 +157,7 @@ public:
 
 	float GetWheelRadius() const { return mWheelRadius; }
 
-	class UStaticMeshComponent* GetStaticMeshComponent() const { return mStaticMeshComponent; }
+	TArray<class UStaticMeshComponent*> GetStaticMeshComponents() const { return mStaticMeshComponents; }
 
 	// End Accessors and change delegates
 
@@ -183,7 +207,7 @@ private:
 	virtual void OnRep_ReplicatedMesh() override;
 
 	UFUNCTION()
-	void OnRep_StaticMeshComponent();
+	void OnRep_StaticMeshComponents();
 
 	UFUNCTION()
 	void OnRep_ReplicatedVehicle();
@@ -320,6 +344,6 @@ private:
 	/**
 	 * The static mesh representing parts if this vehicle in simulated mode.
 	 */
-	UPROPERTY( ReplicatedUsing = OnRep_StaticMeshComponent )
-	class UStaticMeshComponent* mStaticMeshComponent = nullptr;
+	UPROPERTY( ReplicatedUsing = OnRep_StaticMeshComponents )
+	TArray<class UStaticMeshComponent*> mStaticMeshComponents;
 };

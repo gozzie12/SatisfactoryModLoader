@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
+#include "Net/UnrealNetwork.h"
 
 AFGPipeBuilder::AFGPipeBuilder() : Super() {
 	this->mMovementComponent = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("FloatingMovementComponent"));
@@ -13,35 +14,6 @@ AFGPipeBuilder::AFGPipeBuilder() : Super() {
 	this->mCurrentSplineSupportRecipeClass = nullptr;
 	this->mCurrentSplineRecipeClass = nullptr;
 	this->mInternalSplineSupport = nullptr;
-	this->mHitResult.bBlockingHit = false;
-	this->mHitResult.bStartPenetrating = false;
-	this->mHitResult.Time = 1.0;
-	this->mHitResult.Distance = 0.0;
-	this->mHitResult.Location.X = 0.0;
-	this->mHitResult.Location.Y = 0.0;
-	this->mHitResult.Location.Z = 0.0;
-	this->mHitResult.ImpactPoint.X = 0.0;
-	this->mHitResult.ImpactPoint.Y = 0.0;
-	this->mHitResult.ImpactPoint.Z = 0.0;
-	this->mHitResult.Normal.X = 0.0;
-	this->mHitResult.Normal.Y = 0.0;
-	this->mHitResult.Normal.Z = 0.0;
-	this->mHitResult.ImpactNormal.X = 0.0;
-	this->mHitResult.ImpactNormal.Y = 0.0;
-	this->mHitResult.ImpactNormal.Z = 0.0;
-	this->mHitResult.TraceStart.X = 0.0;
-	this->mHitResult.TraceStart.Y = 0.0;
-	this->mHitResult.TraceStart.Z = 0.0;
-	this->mHitResult.TraceEnd.X = 0.0;
-	this->mHitResult.TraceEnd.Y = 0.0;
-	this->mHitResult.TraceEnd.Z = 0.0;
-	this->mHitResult.PenetrationDepth = 0.0;
-	this->mHitResult.ElementIndex = 0;
-	this->mHitResult.PhysMaterial = nullptr;
-	this->mHitResult.Actor = nullptr;
-	this->mHitResult.Component = nullptr;
-	this->mHitResult.BoneName = TEXT("None");
-	this->mHitResult.MyBoneName = TEXT("None");
 	this->mMoveTime = 3.0;
 	this->mHeightCurve = nullptr;
 	this->mTrailClass = nullptr;
@@ -49,9 +21,9 @@ AFGPipeBuilder::AFGPipeBuilder() : Super() {
 	this->mTrailDistance = 500.0;
 	this->mPipeSupportLocation->SetupAttachment(mMesh);
 }
-void AFGPipeBuilder::BeginPlay(){ }
-void AFGPipeBuilder::EndPlay(const EEndPlayReason::Type EndPlayReason){ }
-void AFGPipeBuilder::Tick(float dt){ }
+void AFGPipeBuilder::BeginPlay(){ Super::BeginPlay(); }
+void AFGPipeBuilder::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
+void AFGPipeBuilder::Tick(float dt){ Super::Tick(dt); }
 void AFGPipeBuilder::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFGPipeBuilder, mSplineHologram);

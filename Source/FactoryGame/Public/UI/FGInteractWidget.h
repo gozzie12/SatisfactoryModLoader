@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "UMG.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/FGUserWidget.h" // <FL> [WuttkeP] Changed base type of UFGInteractWidget to UFGUserWidget to allow assigning keybindings to it.
 #include "FGInteractWidget.generated.h"
 
 // Simple object wrapper for a hit result so we can put it as the interact object for an interact widget
@@ -27,7 +27,7 @@ public:
  * Base class for stackable widgets in the game such as building interaction windows.
  */
 UCLASS( config = Game )
-class FACTORYGAME_API UFGInteractWidget : public UUserWidget
+class FACTORYGAME_API UFGInteractWidget : public UFGUserWidget // <FL> [WuttkeP] Changed base type of UFGInteractWidget to UFGUserWidget to allow assigning keybindings to it.
 {
 	GENERATED_BODY()
 public:
@@ -41,8 +41,6 @@ public:
 
 	UFUNCTION( BlueprintCallable, BlueprintNativeEvent, Category = "UI" )
 	void SetInputMode();
-
-	void HandleEquipment();
 	
 	void PassThroughKeybindings();
 
@@ -57,6 +55,9 @@ public:
 
 	UFUNCTION( BlueprintCallable, Category = "Input" )
 	void OnConsume();
+
+	UFUNCTION( BlueprintCallable, Category = "Input" )
+	void OnPushedToGameUI();
 
 	/** Gets the alignment we want */
 	UFUNCTION( BlueprintPure, Category = "UI" ) 
@@ -136,11 +137,18 @@ public:
 	UFUNCTION( BlueprintImplementableEvent, Category = "Factory Clipboard" )
 	void OnFactoryClipboardPasted( UObject* interactObject, class UFGFactoryClipboardSettings* factoryClipboardSettings );
 
+	// <FL> KajtaziT added to support hotbar page switching for radial menu, otherwise OnDestruct would trigger build mode
+	UFUNCTION( BlueprintImplementableEvent, Category = "Input" )
+	void ClearRadialMenuSelection();
+
+	// <FL> KohnhorstT added to support on the fly update of items on hotbar page switching for radial menu
+	UFUNCTION(BlueprintImplementableEvent, Category = "Radial Menu")
+	void RefreshRadialMenuItems();
+
 protected:
 	// Begin UUserWidget interface
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-	virtual void NativeOnRemovedFromFocusPath( const FFocusEvent& InFocusEvent ) override;
 	// End UUserWidget interface
 
 	// Requirement check to verify before calling blueprint Init
@@ -185,6 +193,26 @@ public:
 	/** Decides if the widget should restore focus when it looses it. (e.g. when the user clicks outside of the widget) */
 	UPROPERTY( EditDefaultsOnly, Category = "Input" )
 	bool mRestoreFocusWhenLost = true;
+
+	/** Whether or not to we want to disable Player Actions while this widget is open. */
+	UPROPERTY( EditDefaultsOnly, Category = "Input" )
+	bool mDisablePlayerActions;
+
+	/** Whether or not to we want to disable BuildGun Actions while this widget is open. */
+	UPROPERTY( EditDefaultsOnly, Category = "Input" )
+	bool mDisableBuildGunActions;
+	
+	/** Whether or not to we want to disallow the player from managing their equipment while this widget is open. */
+	UPROPERTY( EditDefaultsOnly, Category = "Input" )
+	bool mDisablePlayerEquipmentManagement;
+
+	/** Whether or not to flush mouse button input when opening the widget. */
+	UPROPERTY( EditDefaultsOnly, Category = "Input" )
+	bool mFlushMouseKeysOnOpen;
+
+	/** Whether or not to clear bindings on NativeDestruct. */
+	UPROPERTY( EditDefaultsOnly, Category = "Input" )
+	bool mClearBindingsOnDestruct;
 	
 	// Begin Deprecated Input
 	/** Decides if we should share input with game or capture it completely */
@@ -211,7 +239,6 @@ public:
 	/** Class of the default widget we want to give focus to */
 	UPROPERTY( config, EditDefaultsOnly, Category = "UI" ) 
 	TSubclassOf< UUserWidget > mDefaultFocusWidgetClass;
-
 
 protected:
 	/** Should gamepad act as cursor when using this widget? */

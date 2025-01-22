@@ -3,14 +3,23 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "CoreMinimal.h"
-#include "UObject/NoExportTypes.h"
-#include "FGResearchTreeNode.h"
 #include "AvailabilityDependencies/FGAvailabilityDependency.h"
+#include "CoreMinimal.h"
+#include "FGEventSubsystem.h"
+#include "FGResearchTreeNode.h"
 #include "IncludeInBuild.h"
 #include "Styling/SlateBrush.h"
-#include "FGEventSubsystem.h"
+#include "UObject/NoExportTypes.h"
 #include "FGResearchTree.generated.h"
+
+UENUM( BlueprintType )
+enum EResearchTreeStatus
+{
+	ERTS_Locked					= 0 UMETA( DisplayName = "Locked" ),
+	ERTS_Unlocked				= 1 UMETA( DisplayName = "Unlocked" ),
+	ERTS_StartedResearch		= 2 UMETA( DisplayName = "Started Research" ),
+	ERTS_FinishedAllResearch	= 3 UMETA( DisplayName = "Finished All Research" ),
+};
 
 /**
  * 
@@ -24,7 +33,7 @@ public:
 	// Begin UObject interface
 	void PostLoad() override;
 #if WITH_EDITOR
-	virtual void PreSave( const class ITargetPlatform* targetPlatform ) override;
+	virtual void PreSave( FObjectPreSaveContext SaveContext ) override;
 	virtual EDataValidationResult IsDataValid(TArray<FText>& ValidationErrors) override;
 #endif
 	// End UObject interface
@@ -70,6 +79,10 @@ public:
 	UFUNCTION( BlueprintPure, Category = "Research Tree" )
     static TArray< EEvents > GetRelevantEvents( TSubclassOf< UFGResearchTree > inClass );
 
+	static EResearchTreeStatus GetResearchTreeStatus( TSubclassOf< UFGResearchTree > inClass, UObject* worldContext );
+
+	bool GetIsEventTree() const { return mIsEventTree; }
+	
 protected:
 	/** The name to be displayed to the player before the tree is unlocked */
 	UPROPERTY( EditDefaultsOnly, Category = "Research Tree" )
@@ -107,6 +120,10 @@ protected:
 	UPROPERTY( EditDefaultsOnly, Instanced, Category = "Research Tree" )
 	TArray< class UFGResearchTreeNode* > mNodes;
 
+	/** True if tree is related to event. Will not give achievement if researched. */
+	UPROPERTY( EditDefaultsOnly, Category = "Research Tree" )
+	bool mIsEventTree = false;
+	
 private:
 	/** Asset Bundle data computed at save time. In cooked builds this is accessible from AssetRegistry */
 	UPROPERTY()

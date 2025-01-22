@@ -4,8 +4,8 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "FGInstancedSplineMeshComponent.h"
-#include "Buildables/FGBuildableFactory.h"
+#include "FGBuildableFactory.h"
+#include "InstancedSplineMeshComponent.h"
 #include "FGBuildableJumppad.generated.h"
 
 USTRUCT( BlueprintType )
@@ -32,7 +32,7 @@ struct FACTORYGAME_API TrackedJumpPadPlayer
 	float LastJumpTimeStamp;
 };
 
-DECLARE_LOG_CATEGORY_EXTERN( LogJumpPad, Log, All );
+FACTORYGAME_API DECLARE_LOG_CATEGORY_EXTERN( LogJumpPad, Log, All );
 
 /**
  * Base class for the jump pads.
@@ -83,7 +83,7 @@ public:
 	bool HasPowerForLaunch() const { return mHasPowerForLaunch; }
 
 	UFUNCTION( BlueprintPure, Category = "JumpPad" )
-	FVector GetLaunchDirection();
+	FVector GetLaunchDirection() const;
 
 	UFUNCTION( BlueprintPure, Category = "JumpPad" )
 	bool ShouldDisplayTrajectory() const { return mShowTrajectoryCounter > 0; }
@@ -105,7 +105,7 @@ public:
 
 	// Calculates launch velocity for an object in order to land at the designated landing location for this jumppad.
 	UFUNCTION( BlueprintPure, Category = "JumpPad" )
-	FVector CalculateLaunchVelocity( const FVector& StartLocation, float Gravity ) const;
+	FVector CalculateLaunchVelocity( const FVector& startLocation, const float gravity ) const;
 
 	UFUNCTION( BlueprintCallable, Category = "JumpPad" )
 	const FTrajectoryData& ResimulateTrajectory();
@@ -231,13 +231,21 @@ protected:
 	UPROPERTY( EditDefaultsOnly, Category = "Trajectory|Mesh")
     UStaticMesh* mTrajectorySplineMesh;
 	
+	/** The offset for the spline data for the block visualization */
+	UPROPERTY( EditDefaultsOnly, Category = "Trajectory|Mesh" )
+	int32 mTrajectorySplineMeshNumPrimitiveDataFloats;
+	
+	/** Spline data settings for the trajectory spline mesh */
+	UPROPERTY( EditDefaultsOnly, Category = "Trajectory|Mesh" )
+	FSplineDataSettings mTrajectorySplineMeshSplineDataSettings;
+	
 	/* Number of arrows generated over the spline. */
 	UPROPERTY( EditDefaultsOnly, Category = "Trajectory")
 	int32 mNumArrows;
 
 	/* Generated on command */
 	UPROPERTY()
-	UFGInstancedSplineMeshComponent* mTrajectorySplineComponent;
+	UInstancedSplineMeshComponent* mTrajectorySplineComponent;
 	
 	/* Generated on command */
 	UPROPERTY()
@@ -259,6 +267,8 @@ protected:
 	Not using a bool because several objects could request us to show the trajectory at the same time. */
 	UPROPERTY( VisibleAnywhere, Category = "Trajectory" )
 	int32 mShowTrajectoryCounter;
+
+	
 
 	/** Used to track players and how many jumps theyve done. Initially intended for playing sounds in a sequence for christmas event.*/
 	// TODO: This isn't very clean, as it will keep old data between sessions and only really reset once the game shuts down

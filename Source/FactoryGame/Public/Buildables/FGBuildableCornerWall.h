@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildableFactoryBuilding.h"
+#include "FGBuildableFactoryBuilding.h"
 #include "FGBuildableCornerWall.generated.h"
 
 /**
@@ -16,7 +16,7 @@ class FACTORYGAME_API AFGBuildableCornerWall : public AFGBuildableFactoryBuildin
 {
 	GENERATED_BODY()
 public:
-	AFGBuildableCornerWall();
+	AFGBuildableCornerWall(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	
 public:
 	/** Size of the wall corner */
@@ -30,4 +30,11 @@ public:
 	/** Whether or not this is an inverted corner. */
 	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category = "Wall" )
 	bool mIsInverted;
+};
+
+UCLASS( Abstract )
+class FACTORYGAME_API AFGBuildableCornerWallLightweight : public AFGBuildableCornerWall
+{
+	GENERATED_BODY()
+	AFGBuildableCornerWallLightweight(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

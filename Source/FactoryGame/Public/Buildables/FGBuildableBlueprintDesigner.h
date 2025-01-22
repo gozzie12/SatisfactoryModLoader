@@ -3,13 +3,13 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildable.h"
-#include "Buildables/FGBuildableStorage.h"
+#include "FGBuildable.h"
+#include "FGBuildableStorage.h"
 #include "FGFactoryBlueprintTypes.h"
 #include "FGPlayerController.h"
 #include "ItemAmount.h"
-#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "FGBuildableBlueprintDesigner.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnRecordDataChanged, FBlueprintRecord, blueprintRecord );
@@ -55,10 +55,16 @@ public:
 	// End IFGSaveInterface
 
 	// Begin Dismantle Interface
-	virtual void GetDismantleRefund_Implementation( TArray< FInventoryStack >& out_refund ) const override;
-	virtual void Dismantle_Implementation() override;
 	virtual bool CanDismantle_Implementation() const override;
+	virtual void GetChildDismantleActors_Implementation(TArray<AActor*>& out_ChildDismantleActors) const override;
+	virtual void GetDismantleDependencies_Implementation(TArray<AActor*>& out_dismantleDependencies) const override;
+	virtual bool SupportsDismantleDisqualifiers_Implementation() const override { return true; }
+	virtual void GetDismantleDisqualifiers_Implementation(TArray<TSubclassOf<UFGConstructDisqualifier>>& out_dismantleDisqualifiers, const TArray<AActor*>& allSelectedActors) const override;
 	// end Dismantle interface
+
+	// Begin AFGBuildable interface
+	virtual void RegisterInteractingPlayer_Implementation(AFGCharacterPlayer* player) override;
+	// End AFGBuildable interface
 
 	/** Draws the tiles for visualizing the Rectangular prism */
 	static void BuildTiledMeshes( UInstancedStaticMeshComponent* tiledMeshComp, const FIntVector& dims );
@@ -70,8 +76,11 @@ public:
 	void OnBuildableConstructedInsideDesigner( AFGBuildable* buildable ); 
 	void OnBuildableDismantledInsideDesigner( AFGBuildable* buildable );
 
+	/** Called when the buildable cost changes inside of the blueprint designer. Used to recompute the cost */
+	void OnBuildableChangedInsideDesigner( AFGBuildable* buildable );
+
 	/** Calculates the item amount of all buildables inside the blueprint designer (for reporting to UI) */
-	void CalculateBlueprintCost( TArray<FItemAmount>& cost );
+	void CalculateBlueprintCost( TArray<FItemAmount>& cost ) const;
 	
 	UFUNCTION( BlueprintCallable, Category="Blueprint Designer" )
 	void SaveBlueprint( FBlueprintRecord blueprintRecord, AFGPlayerController* controller );
@@ -84,7 +93,7 @@ public:
 	void DismantleCurrentBuildables( AFGPlayerController* controller );
 
 	/** Gets the refund amount for dismantling current buildables */
-	void GetCurrentBuildablesDismantleRefund( TArray< FInventoryStack >& out_refund );
+	void GetCurrentBuildablesDismantleRefund( TArray< FInventoryStack >& out_refund, bool noBuildCostEnabled );
 
 	UFUNCTION( BlueprintCallable, Category="Blueprint Designer" )
 	EBlueprintDesignerLoadResult LoadBlueprintIntoDesigner( UFGBlueprintDescriptor* blueprintDescriptor, AFGPlayerController* controller );
@@ -97,6 +106,9 @@ public:
 
 	UFUNCTION( BlueprintPure, Category="Blueprint Designer" )
 	FORCEINLINE UFGBlueprintDescriptor* GetCurrentDescriptor() { return mCurrentBlueprintDescriptor; }
+
+	UFUNCTION( BlueprintPure, Category="Blueprint Designer" )
+	FORCEINLINE class UBoxComponent* GetCollisionComponent() { return mCollisionComponent; }
 
 	UFUNCTION( BlueprintPure, Category="Blueprint Designer" )
 	FORCEINLINE FIntVector GetBlueprintDimensions() const { return mDimensions; }
@@ -120,7 +132,7 @@ public:
 	bool CanAffordToLoad( UFGBlueprintDescriptor* blueprintDesc, UFGInventoryComponent* playerInv );
 
 	/** A blueprint was loaded, remove the items from the inventories. Should only be done if we already determined it was able to be afforded */
-	void RemoveCostToLoad( UFGBlueprintDescriptor* blueprintDescriptor, UFGInventoryComponent* playerInv );
+	void RemoveCostToLoad( UFGBlueprintDescriptor* blueprintDescriptor, AFGCharacterPlayer* character );
 	
 	virtual void OnBuildEffectFinished() override;
 
@@ -134,7 +146,10 @@ public:
 
 	void OnBuildingsChanged();
 
+	void RecalculateBlueprintCost();
 private:
+	void GenerateIntersectionBoxes();
+	
 	UFUNCTION()
 	void OnRep_Buildables();
 
@@ -148,7 +163,7 @@ public:
 	
 	/** Collision Box */
 	UPROPERTY( EditAnywhere, Category="Blueprint Designer")
-	UBoxComponent* mCollisionComponent;
+	class UBoxComponent* mCollisionComponent;
 
 	/** Design area box mesh. Should be a 1x1 cube, code will scale to match tile dimensions */
 	UPROPERTY( EditAnywhere, Category="Blueprint Designer")
@@ -209,15 +224,15 @@ private:
 	UPROPERTY( SaveGame, ReplicatedUsing=OnRep_Buildables )
 	TArray< class AFGBuildable* > mBuildables;
 
-	UPROPERTY()
-	TArray< UFGClearanceComponent* > mIntersectComponents;
-
 	/** The header data loaded or set on this designer */
 	UPROPERTY( SaveGame, ReplicatedUsing=OnRep_RecordData )
 	FBlueprintRecord mCurrentRecordData;
 
 	UPROPERTY()
 	UFGBlueprintDescriptor* mCurrentBlueprintDescriptor;
+
+	UPROPERTY()
+	bool mIsDismantlingAll = false;
 	
 };
 

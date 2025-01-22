@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "FGPipeConnectionComponent.h"
 #include "FGSwatchGroup.h"
+#include "Net/UnrealNetwork.h"
 
 void FQuantizedPipelineIndicatorData::SetFlowPct(float pct){ }
 float FQuantizedPipelineIndicatorData::GetFlowPct() const{ return float(); }
@@ -16,16 +17,20 @@ AFGBuildablePipeline::AFGBuildablePipeline() : Super() {
 	this->mFlowIndicatorMinimumPipeLength = 0.0;
 	this->mFlowIndicator = nullptr;
 	this->mSoundSplineComponent = nullptr;
+	this->mSoundSplineComponentEmitterInterval = 200.0;
 	this->mSplineAudioEvent = nullptr;
 	this->mMaxIndicatorTurnAngle = 3.0;
 	this->mCachedFluidDescriptor = nullptr;
 	this->mCurrentFluid = TEXT("");
 	this->mLastContentForSound = 0.0;
 	this->mLastFlowForSound = 0.0;
+	this->mLastElapsedTime = 0.0;
+	this->mLastFlowForSoundUpdateThreshold = 0.0;
 	this->mRattleLimit = 0.5;
 	this->mIsRattling = false;
 	this->mStartRattleSoundEvent = nullptr;
 	this->mStopRattleSoundEvent = nullptr;
+	this->mUpdateSoundsTimerInterval = 0.0625;
 	this->mConnection0 = CreateDefaultSubobject<UFGPipeConnectionComponent>(TEXT("PipelineConnection0"));
 	this->mConnection1 = CreateDefaultSubobject<UFGPipeConnectionComponent>(TEXT("PipelineConnection1"));
 	this->mFactoryTickFunction.TickGroup = ETickingGroup::TG_PrePhysics;
@@ -44,14 +49,17 @@ void AFGBuildablePipeline::GetLifetimeReplicatedProps(TArray< FLifetimeProperty 
 	DOREPLIFETIME(AFGBuildablePipeline, mFlowIndicator);
 	DOREPLIFETIME(AFGBuildablePipeline, mIndicatorData);
 }
-void AFGBuildablePipeline::BeginPlay(){ }
-void AFGBuildablePipeline::EndPlay(const EEndPlayReason::Type endPlayReason){ }
+void AFGBuildablePipeline::BeginPlay(){ Super::BeginPlay(); }
+void AFGBuildablePipeline::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 void AFGBuildablePipeline::Factory_Tick(float dt){ }
+bool AFGBuildablePipeline::ShouldRegisterToFactoryTickGroup() const { return bool(); }
+void AFGBuildablePipeline::PreUpgrade_Implementation(){ }
 void AFGBuildablePipeline::Upgrade_Implementation(AActor* newActor){ }
 void AFGBuildablePipeline::GainedSignificance_Implementation(){ }
 void AFGBuildablePipeline::LostSignificance_Implementation(){ }
+float AFGBuildablePipeline::GetSignificanceRange(){ return float(); }
 TSubclassOf< UFGPipeConnectionComponentBase > AFGBuildablePipeline::GetConnectionType_Implementation(){ return TSubclassOf<UFGPipeConnectionComponentBase>(); }
-void AFGBuildablePipeline::SetCustomizationData_Native(const FFactoryCustomizationData& customizationData){ }
+void AFGBuildablePipeline::SetCustomizationData_Native(const FFactoryCustomizationData& customizationData, bool skipCombine){ }
 void AFGBuildablePipeline::ApplyCustomizationData_Native(const FFactoryCustomizationData& customizationData){ }
 void AFGBuildablePipeline::StartIsAimedAtForColor_Implementation( AFGCharacterPlayer* byCharacter, bool isValid){ }
 void AFGBuildablePipeline::StopIsAimedAtForColor_Implementation( AFGCharacterPlayer* byCharacter){ }
@@ -59,6 +67,7 @@ void AFGBuildablePipeline::GetChildDismantleActors_Implementation(TArray< AActor
 FFluidBox* AFGBuildablePipeline::GetFluidBox(){ return nullptr; }
 TArray< class UFGPipeConnectionComponent* > AFGBuildablePipeline::GetPipeConnections(){ return TArray<class UFGPipeConnectionComponent*>(); }
 void AFGBuildablePipeline::OnFluidDescriptorSet(){ }
+void AFGBuildablePipeline::CreateClearanceData( USplineComponent* splineComponent, const TArray< FSplinePointData >& splineData, const FTransform& pipeTransform, TArray< FFGClearanceData >& out_clearanceData, float maxDistance){ }
 TArray< AFGBuildablePipeline* > AFGBuildablePipeline::Split(AFGBuildablePipeline* pipeline, float offset, bool connectNewPipelines, AActor* instigator){ return TArray<AFGBuildablePipeline*>(); }
 AFGBuildablePipeline* AFGBuildablePipeline::Merge(TArray< AFGBuildablePipeline* > pipelines, AActor* instigator){ return nullptr; }
 float AFGBuildablePipeline::GetIndicatorContentPct() const{ return float(); }
@@ -69,7 +78,6 @@ TSubclassOf< UFGItemDescriptor > AFGBuildablePipeline::GetFluidDescriptor() cons
 AFGBuildablePipelineFlowIndicator* AFGBuildablePipeline::GetFlowIndicator() const{ return nullptr; }
 void AFGBuildablePipeline::SmoothValues(float& flowPct,  float& contentPct, float dt) const{ }
 void AFGBuildablePipeline::GetRawValues(float& flowPct,  float& contentPct) const{ }
-void AFGBuildablePipeline::PostSerializedFromBlueprint(){ }
 void AFGBuildablePipeline::UpdateSounds(){ }
 bool AFGBuildablePipeline::FindBestInidicatorPlacement(FTransform& out_transform){ return bool(); }
 const FName AFGBuildablePipeline::mConnectionName0 = FName();

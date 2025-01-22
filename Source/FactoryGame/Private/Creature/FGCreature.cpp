@@ -3,6 +3,9 @@
 #include "Creature/FGCreature.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
+#include "Net/UnrealNetwork.h"
+
+DEFINE_LOG_CATEGORY(LogCreature);
 
 TAutoConsoleVariable<int32> CVarCreatureDebug(TEXT("CVarCreatureDebug"), 0, TEXT(""));
 TAutoConsoleVariable<int32> CVarCreatureVisionDebug(TEXT("CVarCreatureVisionDebug"), 0, TEXT(""));
@@ -11,6 +14,7 @@ void UFGCreatureInterruptTest::Initialize(AFGCreature* creature, AFGCreatureCont
 #if WITH_EDITOR
 void AFGCreature::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent){ Super::PostEditChangeProperty(PropertyChangedEvent); }
 bool AFGCreature::IsSelectedInEditor() const{ return bool(); }
+EDataValidationResult AFGCreature::IsDataValid(FDataValidationContext& Context) const{ return EDataValidationResult::Valid; }
 #endif 
 #ifdef WITH_EDITOR
 #endif 
@@ -62,6 +66,8 @@ AFGCreature::AFGCreature(const FObjectInitializer& ObjectInitializer) : Super(Ob
 	this->mStunDamageCooldownDuration = 5.0;
 	this->mStunDamageReductionRate = 1.0;
 	this->mIsStunned = false;
+	this->mDefaultRotationRate = 90.0;
+	this->mCombatRotationRate = 360.0;
 	this->bUseControllerRotationYaw = false;
 	this->AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 	this->mEyeLocationComponent->SetupAttachment(GetCapsuleComponent());
@@ -72,7 +78,8 @@ void AFGCreature::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLif
 	DOREPLIFETIME(AFGCreature, mIsEnabled);
 	DOREPLIFETIME(AFGCreature, mIsStunned);
 }
-void AFGCreature::BeginPlay(){ }
+void AFGCreature::BeginPlay(){ Super::BeginPlay(); }
+void AFGCreature::Tick(float DeltaSeconds){ Super::Tick(DeltaSeconds); }
 void AFGCreature::PreInitializeComponents(){ Super::PreInitializeComponents(); }
 void AFGCreature::PostInitializeComponents(){ Super::PostInitializeComponents(); }
 void AFGCreature::OnConstruction(const FTransform& Transform){ }
@@ -86,12 +93,13 @@ void AFGCreature::UpdateCreatureNavAgentProps(){ }
 bool AFGCreature::IsReadyToDespawn() const{ return bool(); }
 bool AFGCreature::ShouldSave_Implementation() const{ return bool(); }
 void AFGCreature::Died(AActor* died){ }
+void AFGCreature::DoRagdoll_Internal(){ }
 FVector AFGCreature::GetPawnViewLocation() const{ return FVector(); }
 UFGCreatureMovementComponent* AFGCreature::GetCreatureCharacterMovement() const{ return nullptr; }
 bool AFGCreature::GetAdjustedNavAgentProps(FNavAgentProperties& out_navAgentProps, UWorld* worldContext) const{ return bool(); }
 void AFGCreature::ConfigureArachnophobiaMode_Implementation(bool isArachnophobiaMode){ }
 void AFGCreature::OnArachnophobiaModeChanged(bool isArachnophobiaMode){ }
-void AFGCreature::Multicast_ConsumeItem_Implementation(TSubclassOf<  UFGItemDescriptor > itemDescriptor, int32 amount){ }
+void AFGCreature::Multicast_ConsumeItem_Implementation(TSubclassOf<  UFGItemDescriptor > itemDescriptor, const  AFGPlayerController* playerController){ }
 void AFGCreature::SetMoveSpeed(EMoveSpeed newMoveSpeedType){ }
 void AFGCreature::SpawnDeathItem_Implementation(){ }
 UBehaviorTree* AFGCreature::GetOverrideBehaviorTreeForState(ECreatureState state) const{ return nullptr; }
@@ -100,6 +108,7 @@ bool AFGCreature::IsCreatureStateEnabled(ECreatureState State) const{ return boo
 float AFGCreature::GetRandomRoamingWaitTime() const{ return float(); }
 TArray<UFGAction*> AFGCreature::GetAvailableActionsForState(ECreatureState state){ return TArray<UFGAction*>(); }
 TArray<UFGAction*> AFGCreature::GetAllCreatureActions() const{ return TArray<UFGAction*>(); }
+ANavigationData* AFGCreature::GetCreatureNavData() const{ return nullptr; }
 void AFGCreature::ClearKillOrphanTimer(){ }
 bool AFGCreature::CanBeStunned() const{ return bool(); }
 bool AFGCreature::CanBeStunnedByDamage() const{ return bool(); }

@@ -4,7 +4,28 @@
 
 #include "FactoryGame.h"
 #include "FGActorRepresentation.h"
+#include "Engine/DeveloperSettings.h"
 #include "FGMapCompassSettings.generated.h"
+
+USTRUCT()
+struct FCompassCardinalDirection
+{
+	GENERATED_BODY()
+
+	/** The cardinal direction for this icon */
+	UPROPERTY( EditAnywhere, Config, Category = "Cardinal Direction" )
+	FVector2f CardinalDirection{ForceInit};
+
+	/** Texture to use for displaying this cardinal direction */
+	UPROPERTY( EditAnywhere, Config, Category = "Cardinal Direction" )
+	TSoftObjectPtr<UTexture2D> CardinalDirectionTexture{};
+
+	UPROPERTY( EditAnywhere, Config, Category = "Cardinal Direction" )
+	float CompassHeightOffset{0.0f};
+
+	UPROPERTY( EditAnywhere, Config, Category = "Cardinal Direction" )
+	FVector2f ImageSize{};
+};
 
 UCLASS( config = Game, defaultconfig, meta = ( DisplayName = "Map and Compass" ) )
 class FACTORYGAME_API UFGMapCompassSettings : public UDeveloperSettings
@@ -27,8 +48,6 @@ public:
 	
 	class UNiagaraSystem* GetHighlightedMarkerNiagaraSystem() const;
 	
-	class UFGWorldScannableData* GetWorldScannableData() const;
-	
 	class UFGWorldHeightData* GetWorldHeightData() const;
 
 	UPROPERTY( EditAnywhere, config, Category = Compass, meta = ( ToolTip = "The distance in unreal units where a compass object with a corresponding compass view distance should be visible. -1 is infinite distance" ) )
@@ -41,10 +60,10 @@ public:
 	float mHighestWorldLocation;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
-	TAssetPtr<UStaticMesh> mMapMarkerMesh;
+	TSoftObjectPtr<UStaticMesh> mMapMarkerMesh;
 	
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
-	TAssetPtr<UMaterialInterface> mMapMarkerMaterial;
+	TSoftObjectPtr<UMaterialInterface> mMapMarkerMaterial;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
 	int32 mDefaultStampIconID;
@@ -59,16 +78,16 @@ public:
 	float mMapMarkerObjectHeightOffset;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
-	TAssetPtr<UStaticMesh> mHighlightedMarkerMesh;
+	TSoftObjectPtr<UStaticMesh> mHighlightedMarkerMesh;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
 	FVector mHighlightMarkerMeshScale;
 	
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
-	TAssetPtr<UMaterialInterface> mHighlightedMarkerMaterial;
+	TSoftObjectPtr<UMaterialInterface> mHighlightedMarkerMaterial;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
-	TAssetPtr<class UNiagaraSystem> mHighlightedMarkerNiagaraSystem;
+	TSoftObjectPtr<class UNiagaraSystem> mHighlightedMarkerNiagaraSystem;
 
 	UPROPERTY( EditAnywhere, config, Category = "Map Markers", meta = ( ToolTip = "" ) )
 	FText mMapMarkerFailedToAddMessage;
@@ -92,9 +111,13 @@ public:
 	bool mForceSingleThreadedCalculations;
 
 	UPROPERTY( EditAnywhere, config, Category = "World", meta = ( ToolTip = "" ) )
-	TSoftObjectPtr<class UFGWorldScannableData> mWorldScannableData;
-
-	UPROPERTY( EditAnywhere, config, Category = "World", meta = ( ToolTip = "" ) )
 	TSoftObjectPtr<class UFGWorldHeightData> mWorldHeightData;
 
+	/** Cardinal direction indicators to show on compass */
+	UPROPERTY( EditAnywhere, Config, Category = "Compass" )
+	TArray<FCompassCardinalDirection> mCompassCardinalDirections;
+
+	/** Size of the single icon on the compass, in slate units. */
+	UPROPERTY( EditAnywhere, Config, Category = "Compass" )
+	FVector2f mCompassIconSize{ForceInit};
 };

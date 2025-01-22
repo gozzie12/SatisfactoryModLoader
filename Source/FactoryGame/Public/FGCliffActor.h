@@ -68,7 +68,7 @@ public:
 	FORCEINLINE bool IsSignificant() const { return mIsSignificant; }
 	
 private:
-	UPROPERTY()
+	UPROPERTY(EditInstanceOnly, meta = (AllowPrivateAccess = "true"))
 	UStaticMeshComponent* mMeshComponent;
 	
 	//TArray<FAsyncTask<class FFGAsyncCliffGrassBuilderTask>*> mAsyncTasks;
@@ -80,7 +80,7 @@ private:
 protected:
 	/* Components generated on gain significance. */
 	UPROPERTY( Transient, VisibleAnywhere )
-	TArray< class UHierarchicalInstancedStaticMeshComponent* > mGeneratedMeshComponent;
+	TArray< class UGrassInstancedStaticMeshComponent* > mGeneratedMeshComponent;
 
 public:
 	UPROPERTY( EditInstanceOnly, Category = "Setting" )
@@ -100,6 +100,9 @@ public:
 	UFUNCTION( BlueprintCallable )
 	static void ConvertStaticMeshActorToOnTopMesh( AActor* SelectedActor, FString& ResultMsg );
 
+	UFUNCTION( BlueprintCallable )
+	static void UpdateAssociatedCliffActorsAndReParent();
+
 	UFUNCTION( CallInEditor, Category = "Debug")
 	void DebugSpawn();
 
@@ -107,9 +110,11 @@ public:
 	void ClearDebugSpawn();
 
 	UFUNCTION( CallInEditor, Category = "Debug")
-	void ForceUpdateMeshCPUAccess();
-	
+	void ForceUpdateMeshCPUAccess();	
 
+	UFUNCTION( CallInEditor,Category = "Debug")
+	void DebugDrawSignificanceRange();
+	
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif	
 };
@@ -121,15 +126,16 @@ struct FFGCliffGrassWorker
 		
 	}
 	
-	FFGCliffGrassWorker(AFGCliffActor* inCliffActor, UFoliageType* inType,float inMultiplier, UHierarchicalInstancedStaticMeshComponent* inHISMComponent );
+	FFGCliffGrassWorker(AFGCliffActor* inCliffActor, UFoliageType* inType,float inMultiplier, UGrassInstancedStaticMeshComponent* inHISMComponent );
 
 	/* Input */
 	TWeakObjectPtr<AFGCliffActor> mCliffActor;
 	UFoliageType* mFoliageType;
-	TWeakObjectPtr<class UHierarchicalInstancedStaticMeshComponent> mInstanceComponent;
+	TWeakObjectPtr<class UGrassInstancedStaticMeshComponent> mInstanceComponent;
 	TArray<uint32> mCachedIndices;
-	TArray<FVector> mCachedVerts;
+	TArray<FVector3f> mCachedVerts;
 	float mFoliageTypesDensityMultiplier;
+	TArray<FInstancedStaticMeshInstanceData> mInstanceData;
 	/* Output */
 	FStaticMeshInstanceData InstanceBuffer;
 	TArray<struct FClusterNode> ClusterTree;
@@ -145,7 +151,6 @@ class FFGAsyncCliffGrassBuilderTask : public FNonAbandonableTask
 public:
 	FFGAsyncCliffGrassBuilderTask( FFGCliffGrassWorker* InWorker )
 	{
-		UE_LOG(LogTemp,Warning,TEXT("[%p] Constructing "), this);
 		Builder = InWorker;
 	}
 	

@@ -3,13 +3,30 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableFactory.h"
+#include "FGBuildableFactory.h"
 #include "FGFactoryClipboard.h"
-#include "Replication/FGReplicationDetailInventoryComponent.h"
-#include "Replication/FGReplicationDetailActor_Manufacturing.h"
+#include "FGRecipeProducerInterface.h"
 #include "FGBuildableManufacturer.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnNewRecipeDelegate, TSubclassOf< class UFGRecipe >, newRecipe );
+
+struct FSimpleIngredientData
+{
+	int32 StackSize = INDEX_NONE;
+	EResourceForm Form = EResourceForm::RF_INVALID;
+
+	FSimpleIngredientData(int32 InStackSize, EResourceForm InForm)
+	{
+		StackSize = InStackSize;
+		Form = InForm;
+	}
+	
+	FSimpleIngredientData()
+	{
+		StackSize = INDEX_NONE;
+		Form = EResourceForm::RF_INVALID;
+	}
+};
 
 UCLASS()
 class FACTORYGAME_API UFGManufacturerClipboardSettings : public UFGFactoryClipboardSettings
@@ -20,14 +37,29 @@ public:
 	UPROPERTY( BlueprintReadWrite )
 	TSubclassOf< UFGRecipe > mRecipe;
 
-	/** The pontential we would like to apply */
+	/** The potential we would like to apply */
 	UPROPERTY( BlueprintReadWrite )
 	float mTargetPotential;
+
+	/** The production boost we would like to apply */
+	UPROPERTY( BlueprintReadWrite )
+	float mTargetProductionBoost;
 
 	/** The calculated potential we can apply with the shards/crystals we have. Used to simulate UI changes */
 	UPROPERTY( BlueprintReadWrite )
 	float mReachablePotential;
-	
+
+	/** The calculated production we can apply with the shards we have */
+	UPROPERTY( BlueprintReadWrite )
+	float mReachableProductionBoost;
+
+	/** Descriptor for the overclocking shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mOverclockingShardDescriptor;
+
+	/** Descriptor for the production boost shard item */
+	UPROPERTY( BlueprintReadWrite )
+	TSubclassOf<UFGPowerShardDescriptor> mProductionBoostShardDescriptor;
 };
 
 UCLASS()
@@ -38,7 +70,7 @@ public:
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 
 	UFUNCTION( Server, Reliable )
-	void Server_PasteSettings( class AFGBuildableManufacturer* manufacturer, AFGCharacterPlayer* player, TSubclassOf< class UFGRecipe > recipe, float overclock );
+	void Server_PasteSettings( class AFGBuildableManufacturer* manufacturer, AFGCharacterPlayer* player, TSubclassOf< class UFGRecipe > recipe, float overclock, float productionBoost, TSubclassOf<UFGPowerShardDescriptor> overclockingShard, TSubclassOf<UFGPowerShardDescriptor> productionBoostShard );
 
 private:
 	UPROPERTY( Replicated, Meta = ( NoAutoJson ) )
@@ -56,7 +88,7 @@ class FACTORYGAME_API AFGBuildableManufacturer : public AFGBuildableFactory, pub
 public:
 	// Replication
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
-	virtual void PreReplication( IRepChangedPropertyTracker& ChangedPropertyTracker ) override;
+	virtual void GetConditionalReplicatedProps(TArray<FFGCondReplicatedProperty>& outProps) const override;
 
 	/** Constructor */
 	AFGBuildableManufacturer();
@@ -72,23 +104,18 @@ public:
 	virtual float GetDefaultProductionCycleTime() const override;
 	virtual float GetProductionCycleTimeForRecipe( TSubclassOf< UFGRecipe > recipe ) const override;
 	virtual float CalcProductionCycleTimeForPotential( float potential ) const override;
+	virtual void SetCurrentProductionBoost(float newProductionBoost) override;
 	// End AFGBuildableFactory interface
-
-	// Begin IFGReplicationDetailActorOwnerInterface
-	virtual UClass* GetReplicationDetailActorClass() const override { return AFGReplicationDetailActor_Manufacturing::StaticClass(); };
-	virtual void OnReplicationDetailActorRemoved() override;
-	// End IFGReplicationDetailActorOwnerInterface
-
+	
 	//~ Begin IFGFactoryClipboardInterface
 	bool CanUseFactoryClipboard_Implementation() override { return true; }
 	UFGFactoryClipboardSettings* CopySettings_Implementation() override;
 	bool PasteSettings_Implementation( UFGFactoryClipboardSettings* settings ) override;
 	//~ End IFGFactoryClipboardInterface
 
-	/** Tries to fill up the potential inventory from the given players inventory so we can use the target potential. Doesn't apply target potential
-	 *	Returns the potential we will be able to set given how many shards/crystals we have in our inventory.
-	 */
-	float TryFillPotentialInventory( AFGCharacterPlayer* player, float targetPotential, bool simulate = false );
+	// Begin IFGRecipeProducerInterface
+	virtual TSubclassOf<UFGItemDescriptor> GetRecipeProducerItemDescriptor_Implementation(UObject* WorldContext) const override;
+	// End IFGRecipeProducerInterface
 	
 	/**
 	 * Move all items in the input inventory to the given inventory.
@@ -127,11 +154,11 @@ public:
 
 	/** Get the input inventory from this manufacturer. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory|Inventory" )
-	FORCEINLINE class UFGInventoryComponent* GetInputInventory() const { return mInputInventoryHandler->GetActiveInventoryComponent(); }
+	FORCEINLINE class UFGInventoryComponent* GetInputInventory() const { return mInputInventory; }
 
 	/** Get the output inventory from this manufacturer. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory|Inventory" )
-	FORCEINLINE class UFGInventoryComponent* GetOutputInventory() const { return mOutputInventoryHandler->GetActiveInventoryComponent(); }
+	FORCEINLINE class UFGInventoryComponent* GetOutputInventory() const { return mOutputInventory; }
 
 	/** Get the current recipe for manufacturing. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Factory|Recipe" )
@@ -153,20 +180,23 @@ protected:
 	virtual void Factory_PullPipeInput_Implementation( float dt ) override;
 	virtual void Factory_PushPipeOutput_Implementation( float dt ) override;
 	virtual void Factory_TickProducing( float dt ) override;
-	virtual void OnRep_ReplicationDetailActor() override;
 	// End AFGBuildableFactory interface
 
+	// Begin IFGSaveInterface
+	virtual void PostLoadGame_Implementation(int32 saveVersion, int32 gameVersion) override;
+	// End IFGSaveInterface
+
 	UFUNCTION()
-	void InvalidateCacheCanProduce_InputItemAdded(TSubclassOf< UFGItemDescriptor > itemClass, int32 numAdded);
+	void InvalidateCacheCanProduce_InputItemAdded( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numAdded, UFGInventoryComponent* sourceInventory = nullptr );
 	
 	UFUNCTION()
-	void InvalidateCacheCanProduce_InputItemRemoved(TSubclassOf< UFGItemDescriptor > itemClass, int32 numAdded);
+	void InvalidateCacheCanProduce_InputItemRemoved( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numAdded, UFGInventoryComponent* targetInventory = nullptr );
 	
 	UFUNCTION()
-	void InvalidateCacheCanProduce_OutputItemAdded(TSubclassOf< UFGItemDescriptor > itemClass, int32 numAdded);
+	void InvalidateCacheCanProduce_OutputItemAdded( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numAdded, UFGInventoryComponent* sourceInventory = nullptr );
 	
 	UFUNCTION()
-	void InvalidateCacheCanProduce_OutputItemRemoved(TSubclassOf< UFGItemDescriptor > itemClass, int32 numAdded);
+	void InvalidateCacheCanProduce_OutputItemRemoved( TSubclassOf< UFGItemDescriptor > itemClass, const int32 numAdded, UFGInventoryComponent* targetInventory = nullptr );
 
 	/** Creates inventories needed for the manufacturer */
 	virtual void CreateInventories();
@@ -210,13 +240,7 @@ protected:
 	 * How this is checked can differ between buildings (e.g. Converters), so override if you need something special. 
 	 */
 	virtual bool HasRequiredIngredients() const;
-
 protected:
-	friend class AFGReplicationDetailActor_Manufacturing;
-
-	//UPROPERTY( Replicated, Transient, ReplicatedUsing = OnRep_ReplicationDetailActor )
-	//class AFGReplicationDetailActor_Manufacturing* mReplicationDetailActor;
-
 	/** Called when a new recipe has been set. */
 	UPROPERTY( BlueprintAssignable, Category = "Recipe" )
 	FOnNewRecipeDelegate mCurrentRecipeChanged;
@@ -226,7 +250,7 @@ protected:
 	float mManufacturingSpeed;
 
 	/** Manufacturing progress in range [0,1]. */
-	UPROPERTY( SaveGame, Meta = (NoAutoJson = true) )
+	UPROPERTY( SaveGame, Meta = ( NoAutoJson = true, FGReplicated ) )
 	float mCurrentManufacturingProgress;
 
 	/** Our input inventory, shared for all input connections. */
@@ -252,23 +276,24 @@ protected:
 	/** Our output inventory, shared for all output connections. */
 	UPROPERTY( SaveGame )
 	class UFGInventoryComponent* mOutputInventory;
-
-	/** Active Inventory Component pointers which will switch once the replication detail actor has been created */
-	class UFGReplicationDetailInventoryComponent* mInputInventoryHandler;
-	class UFGReplicationDetailInventoryComponent* mOutputInventoryHandler;
-
+	
 	/** The recipe we're currently running. */
 	UPROPERTY( SaveGame, Replicated, ReplicatedUsing = OnRep_CurrentRecipe, Meta = (NoAutoJson = true) )
 	TSubclassOf< class UFGRecipe > mCurrentRecipe;
+
+	/** The partial outputs carried over from the previous production cycles, used for production boost */
+	UPROPERTY( SaveGame, Meta = (NoAutoJson = true) )
+	TArray< float > mCurrentRecipeRemnants;
 
 	/** Cached Recipe CDO to reduce calls.*/
 	UPROPERTY()
 	const UFGRecipe* mCachedRecipe;
 
+	/** Cached resource recipe ingredient data */
+	TArray<FSimpleIngredientData> mCachedIngredientData;
+
 	/* Updated once an item is removed from the input inventory.*/
 	bool mCachedCanProduce;
 
 	bool bCachedHasOutputSpace;
-private:
-	class AFGReplicationDetailActor_Manufacturing* GetCastRepDetailsActor() const { return Cast<AFGReplicationDetailActor_Manufacturing>( mReplicationDetailActor ); };
 };

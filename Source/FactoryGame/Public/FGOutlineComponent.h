@@ -8,75 +8,89 @@
 #include "FGBlueprintFunctionLibrary.h"
 #include "FGOutlineComponent.generated.h"
 
+/* Swap data for the build effect to function. */
+UCLASS( EditInlineNew, DefaultToInstanced )
+class FACTORYGAME_API UFGGlassIdentifier : public UAssetUserData
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditDefaultsOnly)
+	UMaterialInterface* DepthOverrideMaterial = nullptr;
+};
+
+USTRUCT()
+struct FActorOutlineState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	AActor* Actor = nullptr;
+	
+	UPROPERTY()
+	TMap< FName, class UStaticMeshComponent* > OutlineProxies;
+	
+	UPROPERTY()
+	TMap< FName, class UInstancedStaticMeshComponent* > InstancedOutlineProxies;
+
+	UPROPERTY()
+	EOutlineColor OutlineColor = EOutlineColor::OC_NONE;
+
+	UPROPERTY()
+	bool OnlyHighlightProxies;
+};
 
 /**
  * Component attached to the player that helps with outlining things the player is interacting with.
- *
- * @todo-outline [G2 2022-10-24] I did some minor cleaning up now, but this is a bit messy and could use a proper rework.
  */
 UCLASS( ClassGroup = ( Custom ), meta = ( BlueprintSpawnableComponent ) )
-class FACTORYGAME_API UFGOutlineComponent : public USceneComponent
+class FACTORYGAME_API UFGOutlineComponent final : public USceneComponent
 {
 	GENERATED_BODY()
 public:
 	UFGOutlineComponent();
-
-	static UFGOutlineComponent* Get( UWorld* world );
+	
+	static UFGOutlineComponent* Get( const UWorld* world );
 
 	/** Shows outline using actor's mesh components. Default way to show outline. */
-	UFUNCTION(BlueprintCallable, Category = "FactoryGame|Outline")
-	void ShowOutline( AActor* actorToOutline, EOutlineColor color );
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actorToOutline" ) )
+	void ShowOutline( AActor* actorToOutline, const EOutlineColor color, bool createDefaultProxies = true, bool onlyHighlightProxies = false );
 
-	/** Shows outline using a proxy components. Should only be used if used on instanced actors where default usage fails. */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline" )
-	void ShowProxyOutline( class UStaticMesh* outlineMesh, const FTransform transform, EOutlineColor color );
+	const FActorOutlineState* GetOutlineStateForActor( const AActor* actor ) const;
 
-	/** Shows outline for multiple actors at the same time. */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline" )
-	void ShowMultiActorOutline( TArray< AActor* > actorsToOutline, EOutlineColor color );
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actor" ) )
+	UStaticMeshComponent* FindOrAddOutlineProxy( const AActor* actor, const FName& identifier );
+	
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actor" ) )
+	UInstancedStaticMeshComponent* FindOrAddInstancedOutlineProxy( const AActor* actor, const FName& identifier );
 
-	/** Will change the static mesh used for proxy outlines. */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline" )
-	void UpdateProxyOutlineMesh( class UStaticMesh* newOutlineMesh );
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actor" ) )
+	void RemoveOutlineProxy( const AActor* actor, const FName& identifier );
 
-	/** Updates the current proxy outline mesh's world location and rotation */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline" )
-	void UpdateProxyOutlineLocationAndRotation( FVector newLocation, FRotator newRotation );
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actor" ) )
+	void RemoveInstancedOutlineProxy( const AActor* actor, const FName& identifier );
 
 	/** Disables highlight if it is visible. */
-	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline" )
-	void HideOutline();
-
-	/** Checks if any outline is visible. */
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Outline" )
-	FORCEINLINE bool IsOutlineVisible() const { return mActiveOutlineActor || mOutlineProxy->IsVisible() || mActiveMultiOutlineActors.Num() > 0; }
-
-	/** Gets the current outline color. If the outline isn't visible the color will be OC_NONE. */
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Outline" )
-	FORCEINLINE EOutlineColor GetOutlineColor() const { return mLastOutlineColor; }
-
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Outline", Meta = ( DefaultToSelf = "actor" ) )
+	void HideOutline( AActor* actor );
+	
 protected:
-	void ShowActorOutline( class AActor* actorToOutline, EOutlineColor color );
-	void HideActorOutline( class AActor* actorToDisableOutlineOn );
+	void UpdateOutlineState( const FActorOutlineState& outlineState );
 
-	/** Special treatment for some unknown reason. */
-	void ShowDismantlePendingMaterial( TArray< AActor* > actorPendingDismantle );
-	void ShowDismantlePendingMaterial( AActor* actorPendingDismantle );
-	void ShowDismantlePendingMaterialOnActor( AActor* actorPendingForDismantle );
+	UFUNCTION()
+	void BuildEffectFinished();
 
 private:
-	bool IsOwnedByLocalPlayer();
+	FActorOutlineState* GetOutlineStateForActor( const AActor* actor );
 
-protected:
-	UPROPERTY()
-	class UStaticMeshComponent* mOutlineProxy;
+	UStaticMeshComponent* CreateOutlineProxy( FActorOutlineState& outlineState, const FName& identifier );
+	UInstancedStaticMeshComponent* CreateInstancedOutlineProxy( FActorOutlineState& outlineState, const FName& identifier );
+
+	static void SetupOutlineProxyComponent( const FActorOutlineState& outlineState, UStaticMeshComponent* comp );
 	
+	bool IsOwnedByLocalPlayer() const;
+
+protected:	
 	UPROPERTY()
-	AActor* mActiveOutlineActor;
-	
-	UPROPERTY()
-	TArray< AActor* > mActiveMultiOutlineActors;
-	
-private:
-	EOutlineColor mLastOutlineColor;
+	TArray< FActorOutlineState > mActorOutlineStates;
 };

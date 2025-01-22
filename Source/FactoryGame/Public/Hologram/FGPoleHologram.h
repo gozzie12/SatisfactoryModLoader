@@ -3,7 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Hologram/FGFactoryHologram.h"
+#include "FGFactoryHologram.h"
 #include "Resources/FGPoleDescriptor.h"
 #include "FGPoleHologram.generated.h"
 
@@ -36,23 +36,18 @@ public:
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
 	virtual AActor* Construct( TArray<AActor*>& out_children, FNetConstructionID constructionID ) override;
-	virtual void GetSupportedBuildModes_Implementation( TArray< TSubclassOf< UFGHologramBuildModeDescriptor > >& out_buildmodes ) const override;
-	virtual void OnBuildModeChanged() override;
+	virtual void GetSupportedBuildModes_Implementation( TArray< TSubclassOf< UFGBuildGunModeDescriptor > >& out_buildmodes ) const override;
+	virtual void OnBuildModeChanged( TSubclassOf<UFGHologramBuildModeDescriptor> buildMode ) override;
 	virtual int32 GetBaseCostMultiplier() const override;
+	virtual bool CanNudgeHologram() const override;
+	virtual void ReplaceHologram( AFGHologram* hologram, bool snapTransform ) override;
+	virtual void GetClearanceData( TArray< const FFGClearanceData* >& out_ClearanceData ) const override;
 
 	virtual void ResetBuildSteps();
 	// End AFGHologram interface
 
 	/** Set the height of the pole, useful for parent holograms. */
 	void SetPoleHeight( float height );
-
-	// Begin IFGConstructionMessageInterface
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	virtual void ServerPostConstructMessageDeserialization() override;
-	virtual void OnConstructMessagedDeserialized_Implementation() override;
-	// End IFGConstructionMessageInterface
-
-	virtual void OnPendingConstructionHologramCreated_Implementation( class AFGHologram* fromHologram ) override;
 
 	// Returns the desired height (not clamped to the mesh sizes available)
 	FORCEINLINE float GetPoleHeight() const { return mPoleHeight; }
@@ -62,6 +57,7 @@ public:
 	// Returns the Height for the currently active mesh
 	float GetActiveMeshHeight() const;
 
+	void UpdatePoleMesh();
 protected:
 	// Begin AFGBuildableHologram interface
 	virtual void ConfigureActor( class AFGBuildable* inBuildable ) const override;
@@ -73,14 +69,16 @@ protected:
 	
 private:
 	UFUNCTION()
-	void OnRep_PoleMesh();
+	void OnRep_PoleHeight();
 
 	/** Updates the relative offset for mPoleHeightComponent based on mPoleMesh */
 	void UpdatePoleHeightRelativeLoc();
-
+	
 protected:
+	FFGClearanceData mClearance;
+	
 	/** The most fitting mesh for our aim height. */
-	UPROPERTY( ReplicatedUsing = OnRep_PoleMesh )
+	UPROPERTY()
 	FPoleHeightMesh mPoleMesh;
 
 	bool mCanAdjustHeight;
@@ -107,7 +105,7 @@ private:
 	UPROPERTY()
 	class UInstancedStaticMeshComponent* mInstancedMeshComponent;
 
-	UPROPERTY( CustomSerialization )
+	UPROPERTY( ReplicatedUsing = OnRep_PoleHeight, CustomSerialization )
 	float mPoleHeight;
 
 	UPROPERTY( EditDefaultsOnly, Category = "Pole" )

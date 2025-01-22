@@ -122,16 +122,67 @@ struct FACTORYGAME_API FSaveCustomVersion
 		// 2022-11-25: Nativized shopping list and added blueprint support.
 		NativizedShoppingList,
 
+		// 2022-07-05: Unreal Engine 5 support
+		UnrealEngine5,
+
+		// 2022-11-10: Added support for partitioned worlds in conjunction to sub-level saving 
+		IntroducedWorldPartition,
+
+		// 2023-01-09: Tobias: Refactored drone actions to no longer be uobjects in order to fix a crash.
+		DroneActionRefactor,
+
+		// 2023-01-13: Tobias: Refactored wires to support multiple wire meshes.
+		MultipleWireMeshRefactor,
+
+		// 2023-01-11: Switched FArchive support to be 64bit in SaveSession
+		SwitchTo64BitSaveArchive,
+
+		// 20223-06-14: Added PostLoad corrections for splines built from Blueprints (they were broken do to them being now rendered by a shader)
+		ResetBrokenBlueprintSplines,
+		
+		// 2023-09-15: Inventory Item State Refactor - now we save ItemState on FInventoryItems as a FGDynamicStruct, as opposed to AActor pointer
+		RefactoredInventoryItemState,
+
+		// 2024-04-03: Save version to ensure the paint finishes are in the save data.
+		AddedPaintFinishes,
+
+		// 2024-06-25: Normailzed Arrive / Leave tangents for conveyor chain spline points on load (this is a migration to mimic current spline generation code)
+		NormalizeChainSplineArriveAndLeave,
+		
+		// 2024-06-04: Arbitrary "1.0" version
+		Version1,
+		
 		// -----<new versions can be added above this line>-------------------------------------------------
 		VersionPlusOne,
 		LatestVersion = VersionPlusOne - 1
 	};
 
 	// The GUID for this custom version number
-	inline static const FGuid GUID = FGuid( 0x21043E2F, 0x13E61FD6, 0x513B9D51, 0x3636A230 );
+	static constexpr FGuid GUID{ 0x21043E2F, 0x13E61FD6, 0x513B9D51, 0x3636A230 }; // <FL> [WuttkeP] Made this constexpr to fix bugs due to initialization order.
 
 	inline static const Type MinSupportedVersion = DROPPED_CircuitObjects;
 
-private:
-	FSaveCustomVersion() {}
+	FSaveCustomVersion() = delete;
+};
+
+struct FACTORYGAME_API FRuntimeBuildableInstanceDataVersion
+{
+	enum Type
+	{
+		NoVersion,
+
+		InitialVersion,
+		
+		// -----<new versions can be added above this line>-------------------------------------------------
+		VersionPlusOne,
+		LatestVersion = VersionPlusOne - 1
+	};
+
+	// The GUID for this custom version number
+	inline static const FGuid GUID = FGuid( 0xBA00f45E, 0x573f0061, 0x5AE8F571, 0x694B8ff1 );
+	
+	// Custom name for the Runtime Instance Data
+	inline static const TCHAR RuntimeInstanceCustomVersionName[] = TEXT( "RuntimeBuildableInstanceVersion" );
+	
+	FRuntimeBuildableInstanceDataVersion() = delete;
 };

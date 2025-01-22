@@ -26,16 +26,24 @@ UFGFactorySettings::UFGFactorySettings() : Super() {
 	this->mDefaultPipeConnectionFrameMesh = nullptr;
 	this->mDefaultPipeConnectionArrowMesh = nullptr;
 	this->mDefaultPowerConnectionMesh = nullptr;
+	this->mBlueprintDirectionIndicatorMesh = nullptr;
+	this->mBlueprintDirectionIndicatorMaterial = nullptr;
+	this->mBlueprintDirectionMeshScale = 0.0;
+	this->mBlueprintDirectionMeshForwardOffset = 0.0;
+	this->mBlueprintDirectionMeshHeightOffset = 0.0;
+	this->mBlueprintDirectionMeshRotation = 0.0;
+	this->mBlueprintDirectionMeshPlaceOnGround = true;
+	this->mBlueprintProxyMaterial = nullptr;
 	this->mClearanceMesh = nullptr;
 	this->mClearanceMaterial = nullptr;
-	this->mBlueprintProxyMaterial = nullptr;
 	this->mHologramLoopSound = nullptr;
 	this->mHologramSnapSound = nullptr;
 	this->mBuildGuideMesh = nullptr;
 	this->mBuildGuideWidth = 30.0;
+	this->mGuidelineColorInput = FColor(128, 20, 10);
+	this->mGuidelineColorOutput = FColor(10, 128, 20);
 	this->mBuildGuideMaterial = nullptr;
 	this->mInventoryDropCrate = nullptr;
-	this->mPowerShardClass = nullptr;
 	this->mBuildEffect = nullptr;
 	this->mDismantleEffect = nullptr;
 	this->mDismantlePendingMaterial = nullptr;
@@ -52,9 +60,16 @@ UFGFactorySettings::UFGFactorySettings() : Super() {
 	this->mEmoteShortcutClass = UFGEmoteShortcut::StaticClass();
 	this->mBlueprintShortcutClass = UFGBlueprintShortcut::StaticClass();
 	this->mNumHotbars = 2;
-	this->mNumPresetHotbars = 2;
 	this->mNumSlotsPerHotbar = 10;
+	this->mNumSlotsPerHotbarOnConsoles = 8;
 	this->mAddedPipeProductionPressure = 0.0;
+	this->mPaniniProjectionCollection = nullptr;
+	this->mGuidelineSnappingDistanceThresholdCurve.EditorCurveData.DefaultValue = 3.40282e+38;
+	this->mGuidelineSnappingDistanceThresholdCurve.EditorCurveData.PreInfinityExtrap = ERichCurveExtrapolation::RCCE_Constant;
+	this->mGuidelineSnappingDistanceThresholdCurve.EditorCurveData.PostInfinityExtrap = ERichCurveExtrapolation::RCCE_Constant;
+	this->mGuidelineSnappingDistanceThresholdCurve.ExternalCurve = nullptr;
+	this->mGuidelineDisplayDistanceThreshold = 0.0;
+	this->mGuidelineConnectionAngleThreshold = 15.0;
 }
 UAkAudioEvent* UFGFactorySettings::GetRandomConstructionSound(){ return nullptr; }
 UAkAudioEvent* UFGFactorySettings::GetRandomDismantleSound(){ return nullptr; }

@@ -3,8 +3,8 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Hologram/FGBuildableHologram.h"
 #include "Buildables/FGBuildableFactoryBuilding.h"
+#include "FGBuildableHologram.h"
 
 #include "FGFactoryBuildingHologram.generated.h"
 
@@ -51,19 +51,15 @@ public:
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual AActor* Construct( TArray<AActor*>& out_children, FNetConstructionID constructionID ) override;
 	virtual int32 GetBaseCostMultiplier() const override;
-	virtual void GetSupportedBuildModes_Implementation( TArray<TSubclassOf<UFGHologramBuildModeDescriptor>>& out_buildmodes ) const override;
+	virtual void GetSupportedBuildModes_Implementation( TArray<TSubclassOf<UFGBuildGunModeDescriptor>>& out_buildmodes ) const override;
 	virtual bool DoMultiStepPlacement( bool isInputFromARelease ) override;
-	virtual void OnBuildModeChanged() override;
-	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName ) override;
+	virtual void OnBuildModeChanged( TSubclassOf<UFGHologramBuildModeDescriptor> buildMode ) override;
+	virtual USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName, const FName& attachSocketName ) override;
 	virtual bool CanBeZooped() const override;
+	virtual void CheckClearance(const FVector& locationOffset) override;
+	virtual void CheckValidPlacement() override;
 	// End AFGHologram interface
 	
-	// Begin FGConstructionMessageInterface
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	// End FGConstructionMessageInterface
-
-	virtual void OnPendingConstructionHologramCreated_Implementation( AFGHologram* fromHologram ) override;
-
 protected:
 	// Begin AFGBuildableHologram interface
 	virtual void CheckValidFloor() override;
@@ -139,7 +135,7 @@ protected:
 	EFactoryBuildingPlacementRequirements mPlacementRequirements;
 	
 	/** Zoop amount. In what local space directions to extend the building and by how much. */
-	UPROPERTY( ReplicatedUsing = OnRep_DesiredZoop )
+	UPROPERTY( ReplicatedUsing = OnRep_DesiredZoop, CustomSerialization )
 	FIntVector mDesiredZoop;
 
 	/** Max zoop amount in each local space direction. */

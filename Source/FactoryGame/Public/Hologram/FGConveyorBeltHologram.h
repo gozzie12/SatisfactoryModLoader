@@ -3,9 +3,9 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Hologram/FGSplineHologram.h"
 #include "Components/SplineComponent.h"
 #include "FGFactoryConnectionComponent.h"
+#include "FGSplineHologram.h"
 #include "FGConveyorBeltHologram.generated.h"
 
 /**
@@ -33,21 +33,22 @@ public:
 	virtual void SpawnChildren( AActor* hologramOwner, FVector spawnLocation, APawn* hologramInstigator ) override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual void AdjustForGround( FVector& out_adjustedLocation, FRotator& out_adjustedRotation ) override;
-	virtual void PreHologramPlacement() override;
-	virtual void PostHologramPlacement() override;
+	virtual void PreHologramPlacement( const FHitResult& hitResult ) override;
+	virtual void PostHologramPlacement( const FHitResult& hitResult ) override;
 	virtual bool TrySnapToActor( const FHitResult& hitResult ) override;
 	virtual void Scroll( int32 delta ) override;
-	virtual void GetSupportedScrollModes( TArray<EHologramScrollMode>* out_modes ) const override;
 	virtual float GetHologramHoverHeight() const override;
 	virtual void GetIgnoredClearanceActors( TArray< AActor* >& ignoredActors ) const override;
 	virtual void CheckBlueprintCommingling() override;
+	virtual AFGHologram* GetNudgeHologramTarget() override;
+	virtual bool CanTakeNextBuildStep() const override;
+	virtual void ReplaceHologram( AFGHologram* hologram, bool snapTransform ) override;
+	virtual void GetSupportedBuildModes_Implementation( TArray<TSubclassOf<UFGBuildGunModeDescriptor>>& out_buildmodes ) const override;
 	// End AFGHologram Interface
 
-	// Begin FGConstructionMessageInterface
-	virtual void SerializeConstructMessage( FArchive& ar, FNetConstructionID id ) override;
-	virtual void ClientPreConstructMessageSerialization() override;
-	virtual void ServerPostConstructMessageDeserialization() override;
-	// End FGConstructionMessageInterface
+	// Begin AFGBuildableHologram Interface
+	virtual TArray< class UFGFactoryConnectionComponent* > GetRelevantFactoryConnectionsForGuidelines() const override;
+	// End AFGBuildableHologram Interface
 
 	/** Get the active connections direction, may be any. */
 	EFactoryConnectionDirection GetActiveConnectionDirection() const;
@@ -64,16 +65,18 @@ protected:
 	// End AFGBuildableHologram Interface
 
 	// Begin AFGHologram interface
-	virtual void CheckClearance( const FVector& locationOffset ) override;
+	virtual void PostConstructMessageDeserialization() override;
 	// End AFGHologram interface
 
 	/** Creates the clearance detector used with conveyor belts */
-	void SetupConveyorClearanceDetector();
+	void SetupSnappedConnectionDirections() const;
+	virtual void OnRep_SplineData() override;
 
-private:
 	// Begin FGSplineHologram
 	virtual void UpdateSplineComponent() override;
+	virtual void UpdateClearanceData() override;
 	// End FGSplineHologram
+private:
 
 	/** Create connection arrow component on the client. */
 	UFUNCTION()
@@ -96,23 +99,23 @@ private:
 	
 	/** Child pole hologram used for normal placement */
 	UPROPERTY( Replicated )
-	class AFGConveyorPoleHologram* mChildPoleHologram = nullptr;
+	class AFGConveyorPoleHologram* mChildPoleHologram[ 2 ];
 
 	/** Child pole hologram used for wall placement */
 	UPROPERTY( Replicated )
-	class AFGWallAttachmentHologram* mChildWallPoleHologram = nullptr;
+	class AFGWallAttachmentHologram* mChildWallPoleHologram[ 2 ];
 
 	/** Child pole hologram used for ceiling placement */
 	UPROPERTY( Replicated )
-	class AFGWallAttachmentHologram* mChildCeilingPoleHologram = nullptr;
+	class AFGWallAttachmentHologram* mChildCeilingPoleHologram[ 2 ];
 
 	/** Snap connection of our child wall pole hologram. */
 	UPROPERTY()
-	class UFGFactoryConnectionComponent* mChildWallPoleSnapConnection;
+	class UFGFactoryConnectionComponent* mChildWallPoleSnapConnection[ 2 ];
 
 	/** Snap connection of our child ceiling pole hologram. */
 	UPROPERTY()
-	class UFGFactoryConnectionComponent* mChildCeilingPoleSnapConnection;
+	class UFGFactoryConnectionComponent* mChildCeilingPoleSnapConnection[ 2 ];
 
 	/** Whether or not to flip the direction our belt snaps to our child wall pole hologram. */
 	bool mFlipWallPoleSnapDirection;
@@ -122,12 +125,11 @@ private:
 	class UFGFactoryConnectionComponent* mConnectionComponents[ 2 ];
 
 	/** The connections we've made. */
-	UPROPERTY( CustomSerialization )
+	UPROPERTY( Replicated, CustomSerialization )
 	class UFGFactoryConnectionComponent* mSnappedConnectionComponents[ 2 ];
 
-
 	/** If we upgrade another conveyor belt this is the belt we replaces. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	class AFGBuildableConveyorBelt* mUpgradedConveyorBelt;
 
 	/** Class of conveyor pole to place at the end. */
@@ -154,6 +156,10 @@ private:
 	UPROPERTY( EditDefaultsOnly, Category = "Conveyor Belt" )
 	float mMaxIncline;
 
+	/** Straight spline build mode. */
+	UPROPERTY( EditDefaultsOnly, Category = "Hologram|BuildMode")
+    TSubclassOf< class UFGHologramBuildModeDescriptor > mBuildModeStraight;
+
 	/** Used to replicate the direction arrow. */
 	UPROPERTY( ReplicatedUsing = OnRep_ConnectionArrowComponentDirection )
 	EFactoryConnectionDirection mConnectionArrowComponentDirection;
@@ -161,13 +167,7 @@ private:
 	/** Arrow to indicate the direction of the conveyor while placing it. */
 	UPROPERTY()
 	class UStaticMeshComponent* mConnectionArrowComponent;
-
-	UPROPERTY( CustomSerialization )
-	FVector mConstructionPoleLocations[ 2 ];
-
-	UPROPERTY(CustomSerialization)
-	FRotator mConstructionPoleRotations[ 2 ];
-
+	
 	/** All the generated spline meshes. */
 	UPROPERTY()
 	TArray< class USplineMeshComponent* > mSplineMeshes;

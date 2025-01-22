@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "Resources/FGResourceDescriptor.h"
-#include "Hologram/FGFactoryHologram.h"
+#include "FGFactoryHologram.h"
 #include "FGResourceExtractorHologram.generated.h"
 
 /**
@@ -17,8 +17,10 @@ class FACTORYGAME_API AFGResourceExtractorHologram : public AFGFactoryHologram
 	
 public:
 	AFGResourceExtractorHologram();
+	
 	// Begin AActor Interface
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	// End AActor Interface
 
 	// Begin AFGHologram Interface
@@ -28,6 +30,7 @@ public:
 	virtual bool DoMultiStepPlacement( bool isInputFromARelease ) override;
 	virtual bool IsValidHitResult( const FHitResult& hitResult ) const override;
 	virtual AActor* GetUpgradedActor() const override;
+	virtual bool CanNudgeHologram() const override;
 	// End AFGHologram Interface
 
 protected:
@@ -54,13 +57,13 @@ protected:
 
 protected:
 	UPROPERTY()
-	const class AFGBuildableResourceExtractorBase* mDefaultExtractor = nullptr;
+	const class AFGBuildableResourceExtractorBase* mDefaultExtractor;
 
 	/** The resource node we snapped to. */
-	UPROPERTY()
+	UPROPERTY( Replicated, CustomSerialization )
 	TScriptInterface< class IFGExtractableResourceInterface > mSnappedExtractableResource;
 
-	UPROPERTY( )
-	class AFGBuildableResourceExtractorBase* mUpgradeTarget = nullptr;
+	UPROPERTY( Replicated, CustomSerialization )
+	class AFGBuildableResourceExtractorBase* mUpgradeTarget;
 
 };

@@ -4,6 +4,7 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Net/UnrealNetwork.h"
 
 FSkySphereSettings::FSkySphereSettings(){ }
 #if WITH_EDITOR
@@ -65,7 +66,7 @@ AFGSkySphere::AFGSkySphere() : Super() {
 	this->mDayTickRate = 0.1;
 	this->mNightTickRate = 0.05;
 	this->mCachedTimeOfDaySubSystem = nullptr;
-	this->PrimaryActorTick.TickGroup = ETickingGroup::TG_PrePhysics;
+	this->PrimaryActorTick.TickGroup = ETickingGroup::TG_EndPhysics;
 	this->PrimaryActorTick.EndTickGroup = ETickingGroup::TG_PrePhysics;
 	this->PrimaryActorTick.bTickEvenWhenPaused = false;
 	this->PrimaryActorTick.bCanEverTick = true;
@@ -79,8 +80,8 @@ AFGSkySphere::AFGSkySphere() : Super() {
 void AFGSkySphere::PostActorCreated(){ Super::PostActorCreated(); }
 void AFGSkySphere::PostLoad(){ Super::PostLoad(); }
 void AFGSkySphere::BeginDestroy(){ Super::BeginDestroy(); }
-void AFGSkySphere::Tick(float DeltaTime){ }
-void AFGSkySphere::BeginPlay(){ }
+void AFGSkySphere::Tick(float DeltaTime){ Super::Tick(DeltaTime); }
+void AFGSkySphere::BeginPlay(){ Super::BeginPlay(); }
 void AFGSkySphere::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFGSkySphere, mCurrentSelectedWeather);

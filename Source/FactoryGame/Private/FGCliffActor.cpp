@@ -13,13 +13,15 @@ AFGCliffActorManager::AFGCliffActorManager() : Super() {
 	this->PrimaryActorTick.TickInterval = 1.0;
 }
 void AFGCliffActorManager::EnqueueTask(UWorld* World, FAsyncTask<class FFGAsyncCliffGrassBuilderTask>* inAsyncTask, AFGCliffActor* inActor){ }
-void AFGCliffActorManager::Tick(float DeltaSeconds){ }
-void AFGCliffActorManager::EndPlay(const EEndPlayReason::Type EndPlayReason){ }
+void AFGCliffActorManager::Tick(float DeltaSeconds){ Super::Tick(DeltaSeconds); }
+void AFGCliffActorManager::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 #if WITH_EDITOR
 void AFGCliffActor::ConvertStaticMeshActorToOnTopMesh(AActor* SelectedActor, FString& ResultMsg){ }
+void AFGCliffActor::UpdateAssociatedCliffActorsAndReParent(){ }
 void AFGCliffActor::DebugSpawn(){ }
 void AFGCliffActor::ClearDebugSpawn(){ }
 void AFGCliffActor::ForceUpdateMeshCPUAccess(){ }
+void AFGCliffActor::DebugDrawSignificanceRange(){ }
 void AFGCliffActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent){ Super::PostEditChangeProperty(PropertyChangedEvent); }
 #endif 
 AFGCliffActor::AFGCliffActor() : Super() {
@@ -28,13 +30,13 @@ AFGCliffActor::AFGCliffActor() : Super() {
 	this->mSignificanceRangeMultiplier = 1.25;
 	this->RootComponent = mMeshComponent;
 }
-void AFGCliffActor::BeginPlay(){ }
-void AFGCliffActor::EndPlay(const EEndPlayReason::Type EndPlayReason){ }
+void AFGCliffActor::BeginPlay(){ Super::BeginPlay(); }
+void AFGCliffActor::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
 void AFGCliffActor::OnConstruction(const FTransform& Transform){ }
 void AFGCliffActor::GainedSignificance_Implementation(){ }
 void AFGCliffActor::LostSignificance_Implementation(){ }
 float AFGCliffActor::GetSignificanceRange(){ return float(); }
-FFGCliffGrassWorker::FFGCliffGrassWorker(AFGCliffActor* inCliffActor, UFoliageType* inType,float inMultiplier, UHierarchicalInstancedStaticMeshComponent* inHISMComponent){ }
+FFGCliffGrassWorker::FFGCliffGrassWorker(AFGCliffActor* inCliffActor, UFoliageType* inType,float inMultiplier, UGrassInstancedStaticMeshComponent* inHISMComponent){ }
 void FFGCliffGrassWorker::DoWork(){ }
 void FFGAsyncCliffGrassBuilderTask::DoWork(){ }
 FFGAsyncCliffGrassBuilderTask::~FFGAsyncCliffGrassBuilderTask(){ }

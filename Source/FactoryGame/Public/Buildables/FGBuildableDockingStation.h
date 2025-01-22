@@ -3,8 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Buildables/FGBuildableFactory.h"
-#include "Replication/FGReplicationDetailActor_DockingStation.h"
+#include "FGBuildableFactory.h"
 #include "FGBuildableDockingStation.generated.h"
 
 USTRUCT( BlueprintType )
@@ -42,7 +41,7 @@ public:
 
 	// Begin AActor interface
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
-	virtual void PreReplication( IRepChangedPropertyTracker& ChangedPropertyTracker ) override;
+	virtual void GetConditionalReplicatedProps(TArray<FFGCondReplicatedProperty>& outProps) const override;
 	virtual void BeginPlay() override;
 	virtual void Tick( float DeltaSeconds ) override;
 	virtual void EndPlay( const EEndPlayReason::Type EndPlayReason ) override;
@@ -52,12 +51,7 @@ public:
 	// Begin IFGSaveInterface
 	virtual void PostLoadGame_Implementation( int32 saveVersion, int32 gameVersion ) override;
 	// End IFSaveInterface
-
-	// Begin IFGReplicationDetailActorOwnerInterface
-	virtual UClass* GetReplicationDetailActorClass() const override { return AFGReplicationDetailActor_DockingStation::StaticClass(); };
-	virtual void OnReplicationDetailActorRemoved() override;
-	// End IFGReplicationDetailActorOwnerInterface
-
+	
 	//Begin IFGSignificanceInterface
 	virtual float GetSignificanceRange() override;
 	//End IFGSignificanceInterface
@@ -67,11 +61,11 @@ public:
 
 	/** @return a valid pointer to the fuel inventory */
 	UFUNCTION( BlueprintPure, Category = "Inventory" )
-	FORCEINLINE class UFGInventoryComponent* GetFuelInventory() const{ return mFuelInventoryHandler->GetActiveInventoryComponent(); }
+	FORCEINLINE class UFGInventoryComponent* GetFuelInventory() const{ return mFuelInventory; }
 
 	/** Get the inventory the docked vehicle loads/unloads to  */
 	UFUNCTION( BlueprintPure, Category = "DockingStation" )
-	FORCEINLINE class UFGInventoryComponent* GetInventory() const{ return mInventoryHandler->GetActiveInventoryComponent(); }
+	FORCEINLINE class UFGInventoryComponent* GetInventory() const{ return mInventory; }
 
 	/** Get the docked actor if any. */
 	UFUNCTION( BlueprintPure, Category = "DockingStation" )
@@ -150,6 +144,9 @@ public:
 	UFUNCTION( BlueprintImplementableEvent, Category = "Representation" )
 	FLinearColor GetDefaultRepresentationColor();
 
+	UFUNCTION( BlueprintImplementableEvent, Category = "Representation" )
+	UMaterialInterface* GetDefaultCompassMaterial();
+
 	FVector GetWorldDockPosition() const;
 
 	void FindStationTargets( TArray< class AFGTargetPoint* >& targets );
@@ -158,8 +155,8 @@ public:
 	void AddDockingVehicle( class AFGWheeledVehicle* vehicle );
 	void RemoveDockingVehicle( class AFGWheeledVehicle* vehicle );
 	void UpdateVehicleFuelConsumptionRate();
-	void UpdateMaximumStackTransferRate( bool dispatchToMainThread );
-	void UpdateItemTransferRate( bool dispatchToMainThread );
+	void UpdateMaximumStackTransferRate();
+	void UpdateItemTransferRate();
 
 	UFUNCTION( BlueprintPure, Category = "DockingStation" )
 	int GetDockingVehicleCount() const { return mDockingVehicles.Num(); }
@@ -171,7 +168,7 @@ public:
 
 	virtual void PreSerializedToBlueprint() override;
 	virtual void PostSerializedToBlueprint() override;
-	virtual void PostSerializedFromBlueprint() override;
+	virtual void PostSerializedFromBlueprint( bool isBlueprintWorld ) override;
 	
 protected:
 	// Begin Factory_ interface
@@ -182,14 +179,8 @@ protected:
 
 	// Begin AFGBuildableFactory interface
 	virtual bool CanProduce_Implementation() const override;
-	virtual void OnRep_ReplicationDetailActor() override;
+	virtual EProductionStatus GetProductionIndicatorStatus() const override;
 	// End AFGBuildableFactory interface
-
-	class AFGReplicationDetailActor_DockingStation* GetCastRepDetailsActor() const;
-
-	/** Set up the fuel inventory when replicated */
-	UFUNCTION()
-	void OnRep_FuelInventory();
 
 	/**
 	 * Check if a resource is valid as fuel for this station.
@@ -207,7 +198,6 @@ protected:
 	 */
 	UFUNCTION()
 	bool FilterFuelClasses( TSubclassOf< UObject > object, int32 idx ) const;
-	
 private:
 	void EnsureInfoCreated();
 
@@ -262,8 +252,6 @@ public:
 	class UTexture2D* mActorRepresentationTexture;
 	
 protected:
-	friend class AFGReplicationDetailActor_DockingStation;
-
 	/** All connection components tagged with this is considered fuel components */
 	static FName sFuelTag;
 
@@ -292,15 +280,9 @@ protected:
 	float mFuelTransferSpeed;
 
 	/** Current progress on transfer from/to docking station ( in seconds ) */
-	UPROPERTY( Replicated, Meta = (NoAutoJson = true) )
+	UPROPERTY( Meta = ( NoAutoJson = true, FGReplicated ) )
 	float mTransferProgress;
-
-	UPROPERTY()
-	class UFGReplicationDetailInventoryComponent* mFuelInventoryHandler;
-
-	UPROPERTY()
-	class UFGReplicationDetailInventoryComponent* mInventoryHandler;
-
+	
 	/** All connections that can pull in fuel to the docking station, (References hold by Components array, no need for UPROPERTY) */
 	TArray<class UFGFactoryConnectionComponent*> mFuelConnections;
 
@@ -310,10 +292,6 @@ protected:
 	/** The actor docked to this station. */
 	UPROPERTY( SaveGame )
 	class AActor* mDockedActor;
-
-	/** The actor docked to this station. */
-	/*UPROPERTY( SaveGame )
-	class AActor* mDockedVehicle;*/
 
 	/** A non-automated vehicle currently receiving fuel from the station. */
 	TWeakObjectPtr< class AFGWheeledVehicle > mRefuelingVehicle;

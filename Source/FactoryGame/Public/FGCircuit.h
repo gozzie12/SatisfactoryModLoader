@@ -4,6 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "Replication/FGConditionalReplicationInterface.h"
 #include "UObject/NoExportTypes.h"
 #include "FGSaveInterface.h"
 #include "FGCircuit.generated.h"
@@ -18,7 +19,7 @@
  * 2 or more components are required to make up a circuit. It's not much of a circuit if you're the only one in it!
  */
 UCLASS( Abstract, Blueprintable )
-class FACTORYGAME_API UFGCircuit : public UObject, public IFGSaveInterface
+class FACTORYGAME_API UFGCircuit : public UObject, public IFGSaveInterface, public IFGConditionalReplicationInterface
 {
 	GENERATED_BODY()
 public:
@@ -26,12 +27,12 @@ public:
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
 	virtual bool IsSupportedForNetworking() const override;
 	virtual bool IsNameStableForNetworking() const override;
-	virtual void PreReplication( IRepChangedPropertyTracker& ChangedPropertyTracker );
 
 	UFGCircuit();
 
-	/** Cleanup code */
+	// Begin UObject interface
 	virtual void BeginDestroy() override;
+	// End UObject interface
 
 	// Begin IFGSaveInterface
 	virtual void PreSaveGame_Implementation( int32 saveVersion, int32 gameVersion ) override;
@@ -43,6 +44,11 @@ public:
 	virtual bool ShouldSave_Implementation() const override;
 	// End IFSaveInterface
 
+	// Begin IFGConditionalReplicationInterface
+	virtual bool IsPropertyRelevantForConnection(UNetConnection* netConnection, const FProperty* property) const override;
+	virtual void GetConditionalReplicatedProps(TArray<FFGCondReplicatedProperty>& outProps) const override;
+	// End IFGConditionalReplicationInterface
+	
 	/** Get the subsystems world. */
 	virtual UWorld* GetWorld() const override;
 
@@ -57,15 +63,14 @@ public:
 	void MarkAsChanged();
 	void MarkForFullRebuild();
 
-	/** Haxx to be able to disable replication when no one is looking at the circuit */
+	/** Hax to be able to disable replication when no one is looking at the circuit */
 	void RegisterInteractingPlayer( class AFGCharacterPlayer* player );
 	void UnregisterInteractingPlayer( class AFGCharacterPlayer* player );
+	
+	/** @return the group this circuit belongs too. */
+	int32 GetCircuitGroupID() const { return mCircuitGroupID; }
 
-	/** @return true if this circuit is replicating detailed information about it; false otherwise. */
-	bool IsReplicatingDetails() const { return mReplicateDetails; }
-
-	int32 GetCircuitGroupID() { return mCircuitGroupId; }
-
+	/** @return All components that are part of this circuit, this data might change when circuits are rebuilt. */
 	TArray< class UFGCircuitConnectionComponent* >& GetComponents() { return mComponents; }
 
 	/** Logs the internal state of this circuit. */
@@ -73,7 +78,7 @@ public:
 
 	/**
 	 * @return true if this circuit can be removed without any impact on game logic, false otherwise.
-	*/
+	 */
 	virtual bool IsTrivial() const;
 
 	/**
@@ -101,9 +106,6 @@ protected:
 	virtual void DisplayDebug( class UCanvas* canvas, const class FDebugDisplayInfo& debugDisplay, float& YL, float& YPos, float indent );
 
 private:
-	/** Set if we should replicate details. */
-	void SetReplicateDetails( bool replicateDetails );
-
 	virtual class UFGCircuitGroup* CreateCircuitGroup( AFGCircuitSubsystem* subsystem ) const { return nullptr; }
 
 protected:
@@ -122,11 +124,13 @@ protected:
 	/** True if this circuit has changed. */
 	UPROPERTY()
 	uint8 mHasChanged:1;
+	
+	/** Which group does this circuit belong too. */
+	int32 mCircuitGroupID;
 
-	/** If this buildable is replicating details, i.e. for the UI. */
-	uint8 mReplicateDetails : 1;
-
-	int32 mCircuitGroupId;
+	/** Property replicator handles the replication of conditionally replicated properties */
+	UPROPERTY( Replicated, Transient, meta = ( FGPropertyReplicator ) )
+	FFGConditionalPropertyReplicator mPropertyReplicator;
 private:
 	friend class AFGCircuitSubsystem;
 	friend class UFGCheatManager;
@@ -151,8 +155,8 @@ public:
 	 * Make structural changes to the circuit group as needed.
 	 * @returns true if such changes were made that the circuit groups need to be rebuilt and pre-tick restarted, false otherwise.
 	 */
-	virtual bool PreTickCircuitGroup( float dt, bool hasAuthority ) { return false; }
-	virtual void TickCircuitGroup( float dt, bool hasAuthority ) { }
+	virtual bool PreTickCircuitGroup( float dt ) { return false; }
+	virtual void TickCircuitGroup( float dt ) { }
 	
 	//~ Begin UFGCircuitGroup -> AFGBuildableCircuitSwitch visitor pattern
 	virtual void VisitCircuitBridge( class AFGBuildableCircuitBridge* circuitBridge ) { }

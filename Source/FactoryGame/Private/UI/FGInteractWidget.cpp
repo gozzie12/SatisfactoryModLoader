@@ -9,6 +9,11 @@ UFGInteractWidget::UFGInteractWidget(const FObjectInitializer& ObjectInitializer
 	this->mHideCursorDuringCapture = true;
 	this->mListenForShortcutPressed = false;
 	this->mRestoreFocusWhenLost = true;
+	this->mDisablePlayerActions = true;
+	this->mDisableBuildGunActions = true;
+	this->mDisablePlayerEquipmentManagement = true;
+	this->mFlushMouseKeysOnOpen = false;
+	this->mClearBindingsOnDestruct = true;
 	this->mCaptureInput = false;
 	this->mDesiredHorizontalAlignment = EHorizontalAlignment::HAlign_Fill;
 	this->mDesiredVerticalAlignment = EVerticalAlignment::VAlign_Fill;
@@ -26,19 +31,18 @@ UFGInteractWidget::UFGInteractWidget(const FObjectInitializer& ObjectInitializer
 void UFGInteractWidget::Native_Init(){ }
 void UFGInteractWidget::Init_Implementation(){ }
 void UFGInteractWidget::SetInputMode_Implementation(){ }
-void UFGInteractWidget::HandleEquipment(){ }
 void UFGInteractWidget::PassThroughKeybindings(){ }
 void UFGInteractWidget::UpdateIgnoreMoveInput_Implementation(){ }
 void UFGInteractWidget::UpdateIgnoreLookInput_Implementation(){ }
 void UFGInteractWidget::OnEscapePressed_Implementation(){ }
 void UFGInteractWidget::OnConsume(){ }
+void UFGInteractWidget::OnPushedToGameUI(){ }
 void UFGInteractWidget::SetDefaultFocusWidget(UWidget* focusWidget){ }
 void UFGInteractWidget::SetupDefaultFocus_Implementation(){ }
 void UFGInteractWidget::CopyFactoryClipboard(){ }
 void UFGInteractWidget::PasteFactoryClipboard(){ }
-void UFGInteractWidget::NativeConstruct(){ }
-void UFGInteractWidget::NativeDestruct(){ }
-void UFGInteractWidget::NativeOnRemovedFromFocusPath(const FFocusEvent& InFocusEvent){ }
+void UFGInteractWidget::NativeConstruct(){ Super::NativeConstruct(); }
+void UFGInteractWidget::NativeDestruct(){ Super::NativeDestruct(); }
 bool UFGInteractWidget::NativeCanCallInit(){ return bool(); }
 void UFGInteractWidget::NativeTestAndQueueInit(){ }
 void UFGInteractWidget::ClearRestoreFocusGate(){ }

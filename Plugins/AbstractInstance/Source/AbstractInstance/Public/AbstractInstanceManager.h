@@ -43,10 +43,10 @@ struct ABSTRACTINSTANCE_API FInstanceComponentData
 	GENERATED_BODY()
 
 	UPROPERTY(VisibleInstanceOnly)
-	UHierarchicalInstancedStaticMeshComponent* InstancedStaticMeshComponent;
+	ULightweightHierarchicalInstancedStaticMeshComponent* InstancedStaticMeshComponent;
 
 	UPROPERTY(VisibleInstanceOnly)
-	TArray<UInstancedStaticMeshComponent*> InstancedCollisionComponents;
+	TArray<ULightweightCollisionComponent*> InstancedCollisionComponents;
 
 	TArray<FInstanceHandle*> InstanceHandles;
 
@@ -55,6 +55,8 @@ struct ABSTRACTINSTANCE_API FInstanceComponentData
 
 	/* Cached version when initially made. */
 	FFloatRange DrawDistance;
+	
+	bool bUsesBucketCollision;
 };
 
 USTRUCT()
@@ -122,9 +124,9 @@ public:
 	
 	/* Called from the cvar sink. */
 	void StartDrawDebug(bool bEnabled);
-	void HideAllInstance(bool bHide);
+	void HideAllInstance(bool bIsHidden);
 
-	FORCEINLINE bool CanLazyLoad() const { return bAllowLazySpawn; }
+	FORCEINLINE bool CanLazyLoad() const { return false; }
 	
 protected:	
 	// Called when the game starts or when spawned
@@ -175,4 +177,24 @@ private:
 	
 	static FName BuildUniqueName( const FInstanceData& InstanceData );
 	static FName BuildUniqueName( const UInstancedStaticMeshComponent* MeshComponent );
+};
+
+UCLASS()
+class ABSTRACTINSTANCE_API ULightweightCollisionComponent : public UInstancedStaticMeshComponent
+{
+	GENERATED_BODY()
+
+public:
+	// renderstate is handled by ULightweightCollisionComponent
+	virtual bool ShouldCreateRenderState() const override { return false; }
+};
+
+UCLASS()
+class ABSTRACTINSTANCE_API ULightweightHierarchicalInstancedStaticMeshComponent : public UHierarchicalInstancedStaticMeshComponent
+{
+	GENERATED_BODY()
+
+public:
+	// Physicstate is handled by ULightweightCollisionComponent
+	virtual bool ShouldCreatePhysicsState() const override { return false; }
 };

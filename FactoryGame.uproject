@@ -1,16 +1,68 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "4.26.2-CSS",
+	"EngineAssociation": "5.3.2-CSS",
 	"Category": "",
 	"Description": "",
 	"Modules": [
 		{
 			"Name": "FactoryGame",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"CoreUObject",
+				"AIModule",
+				"GameplayTasks",
+				"SignificanceManager",
+				"ReplicationGraph",
+				"CinematicCamera",
+				"OnlineSubsystemUtils",
+				"UMG",
+				"DeveloperSettings",
+				"AbstractInstance",
+				"EnhancedInput",
+				"Foliage"
+			]
 		},
 		{
-
+			"Name": "FactoryEditor",
+			"Type": "EditorNoCommandlet",
+			"LoadingPhase": "PostEngineInit",
+			"AdditionalDependencies": [
+				"Engine",
+				"CoreUObject",
+				"UnrealEd",
+				"FactoryGame",
+				"EditorSubsystem",
+				"Blutility",
+				"BlueprintGraph"
+			]
+		},
+		{
+			"Name": "FactoryPreEarlyLoadingScreen",
+			"Type": "Runtime",
+			"LoadingPhase": "PreEarlyLoadingScreen"
+		},
+		{
+			"Name": "FactoryDedicatedServer",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"TargetAllowList": [
+				"Server",
+				"Editor"
+			]
+		},
+		{
+			"Name": "FactoryDedicatedClient",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"TargetAllowList": [
+				"Editor",
+				"Client",
+				"Game"
+			]
+		},
+		{
 			"Name": "DummyHeaders",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
@@ -18,7 +70,7 @@
 	],
 	"Plugins": [
 		{
-			"Name": "ApexDestruction",
+			"Name": "ChaosVehiclesPlugin",
 			"Enabled": true
 		},
 		{
@@ -26,44 +78,297 @@
 			"Enabled": true
 		},
 		{
-			"Name": "AnalyticsBlueprintLibrary",
+			"Name": "DTLSHandlerComponent",
 			"Enabled": true
 		},
 		{
-			"Name": "AnalyticsMulticast",
+			"Name": "Wwise",
 			"Enabled": true
 		},
 		{
-			"Name": "SignificanceManager",
+			"Name": "ApexDestruction",
 			"Enabled": true
 		},
 		{
-			"Name": "Alpakit",
+			"Name": "BlueprintStats",
 			"Enabled": true
 		},
 		{
-			"Name": "SML",
+			"Name": "ArchVisCharacter",
+			"Enabled": false
+		},
+		{
+			"Name": "AndroidMedia",
+			"Enabled": false
+		},
+		{
+			"Name": "AvfMedia",
+			"Enabled": false
+		},
+		{
+			"Name": "HTML5Networking",
+			"Enabled": false
+		},
+		{
+			"Name": "MobileLauncherProfileWizard",
+			"Enabled": false
+		},
+		{
+			"Name": "OnlineFramework",
 			"Enabled": true
 		},
 		{
-			"Name": "SMLEditor",
+			"Name": "OnlineSubsystemGooglePlay",
+			"Enabled": false
+		},
+		{
+			"Name": "OnlineSubsystemIOS",
+			"Enabled": false
+		},
+		{
+			"Name": "SubversionSourceControl",
+			"Enabled": false
+		},
+		{
+			"Name": "GearVR",
+			"Enabled": false
+		},
+		{
+			"Name": "OculusInput",
+			"Enabled": false
+		},
+		{
+			"Name": "OculusLibrary",
+			"Enabled": false
+		},
+		{
+			"Name": "OculusRift",
+			"Enabled": false
+		},
+		{
+			"Name": "SteamVR",
+			"Enabled": false
+		},
+		{
+			"Name": "AppleMoviePlayer",
+			"Enabled": false
+		},
+		{
+			"Name": "AndroidMoviePlayer",
+			"Enabled": false
+		},
+		{
+			"Name": "MobilePatchingUtils",
+			"Enabled": false
+		},
+		{
+			"Name": "SlateRemote",
+			"Enabled": false
+		},
+		{
+			"Name": "LocationServicesBPLibrary",
+			"Enabled": false
+		},
+		{
+			"Name": "AndroidPermission",
+			"Enabled": false
+		},
+		{
+			"Name": "LensDistortion",
 			"Enabled": true
+		},
+		{
+			"Name": "AndroidDeviceProfileSelector",
+			"Enabled": false
+		},
+		{
+			"Name": "Dataflow",
+			"Enabled": false
+		},
+		{
+			"Name": "IOSDeviceProfileSelector",
+			"Enabled": false
+		},
+		{
+			"Name": "AudioCapture",
+			"Enabled": false
+		},
+		{
+			"Name": "WindowsDeviceProfileSelector",
+			"Enabled": true
+		},
+		{
+			"Name": "SteamController",
+			"Enabled": false,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "RawInput",
+			"Enabled": true
+		},
+		{
+			"Name": "MfMedia",
+			"Enabled": true
+		},
+		{
+			"Name": "Takes",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor",
+				"Program"
+			]
+		},
+		{
+			"Name": "OnlineSubsystemMcp",
+			"Enabled": false
+		},
+		{
+			"Name": "SocketSubsystemEpic",
+			"Enabled": false,
+			"PlatformAllowList": [
+				"Win64"
+			],
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Win32",
+				"Mac",
+				"Linux"
+			]
+		},
+		{
+			"Name": "OnlineServicesNull",
+			"Enabled": true
+		},
+		{
+			"Name": "OnlineSubsystemSteam",
+			"Enabled": false
+		},
+		{
+			"Name": "OnlineSubsystemEOS",
+			"Enabled": false
 		},
 		{
 			"Name": "OculusVR",
 			"Enabled": false
 		},
 		{
-			"Name": "SteamVR",
+			"Name": "SignificanceManager",
+			"Enabled": true
+		},
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "EditorTests",
+			"Enabled": true
+		},
+		{
+			"Name": "FbxAutomationTestBuilder",
+			"Enabled": true
+		},
+		{
+			"Name": "FunctionalTestingEditor",
+			"Enabled": true
+		},
+		{
+			"Name": "RuntimeTests",
+			"Enabled": true
+		},
+		{
+			"Name": "MagicLeap",
 			"Enabled": false
+		},
+		{
+			"Name": "RenderDocPlugin",
+			"Enabled": false
+		},
+		{
+			"Name": "Landmass",
+			"Enabled": true
+		},
+		{
+			"Name": "ControlRig",
+			"Enabled": true
+		},
+		{
+			"Name": "FullBodyIK",
+			"Enabled": true
+		},
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayCameras",
+			"Enabled": true
+		},
+		{
+			"Name": "TemplateSequence",
+			"Enabled": true
+		},
+		{
+			"Name": "AbstractInstance",
+			"Enabled": true
+		},
+		{
+			"Name": "GeometryScripting",
+			"Enabled": true
+		},
+		{
+			"Name": "GeometryCollectionPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "AppleProResMedia",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64"
+			]
+		},
+		{
+			"Name": "ControlFlows",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
+			"Name": "HairStrands",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayEvents",
+			"Enabled": true
+		},
+		{
+			"Name": "WwiseNiagara",
+			"Enabled": true
 		}
 	],
-	"PreBuildSteps": {
+	"TargetPlatforms": [
+		"Win64",
+		"Linux",
+		"Windows"
+	],
+	"PreBuildSteps":
+	{
 		"Win64": [
-			"powershell -Command \"$file = '$(ProjectDir)\\Plugins\\Wwise\\Source\\AkAudio\\Classes\\OcclusionObstructionService\\AkOcclusionObstructionService.h'; if (Test-Path $file) { (Get-Content $file) -replace 'class AkOcclusionObstructionService', 'class AKAUDIO_API AkOcclusionObstructionService' | Out-File -encoding UTF8 $file }\""
-		],
-		"Linux": [
-			"sed -i 's/class AkOcclusionObstructionService/class AKAUDIO_API AkOcclusionObstructionService/' $(ProjectDir)/Plugins/Wwise/Source/AkAudio/Classes/OcclusionObstructionService/AkOcclusionObstructionService.h"
+			"powershell -Command \"Set-ExecutionPolicy Bypass -Scope Process -Force;Unblock-File '$(ProjectDir)\\Mods\\WwisePatches\\applyPatches.ps1';& '$(ProjectDir)\\Mods\\WwisePatches\\applyPatches.ps1' '$(ProjectDir)'\""
 		]
 	}
 }

@@ -4,8 +4,11 @@
 
 #include "FactoryGame.h"
 #include "FGScannableDetails.h"
+#include "HAL/IConsoleManager.h"
 #include "UObject/Object.h"
 #include "FGItemDescriptor.generated.h"
+
+extern TAutoConsoleVariable<int32> CVarStressTestRadioActivity; 
 
 /**
  * The form this item is in, i.e. does it require pipes or conveyors, can the player pick it up etc.
@@ -19,6 +22,17 @@ enum class EResourceForm : uint8
 	RF_GAS			UMETA( DisplayName = "Gas" ),
 	RF_HEAT			UMETA( DisplayName = "Heat" ),
 	RF_LAST_ENUM	UMETA( Hidden )
+};
+
+/**
+ * In case this item is a gas resource, this is the type of gas.
+ */
+UENUM( BlueprintType )
+enum class EGasType : uint8
+{
+	GT_NORMAL		UMETA( DisplayName = "Normal" ),
+	GT_ENERGY		UMETA( DisplayName = "Energy" ),
+	GT_LAST_ENUM	UMETA( Hidden )
 };
 
 /**
@@ -110,12 +124,12 @@ struct FItemDescriptors
 	GENERATED_BODY()
 
 	FItemDescriptors(){}
-	FItemDescriptors( TArray< TSubclassOf< class UFGItemDescriptor> > itemDescriptors ) :
+	FItemDescriptors( TArray< TSoftClassPtr< class UFGItemDescriptor> > itemDescriptors ) :
 		ItemDescriptors( itemDescriptors )
 	{}
 	
 	UPROPERTY( EditDefaultsOnly )
-	TArray< TSubclassOf< class UFGItemDescriptor> > ItemDescriptors;
+	TArray< TSoftClassPtr< class UFGItemDescriptor> > ItemDescriptors;
 };
 
 /**
@@ -135,11 +149,16 @@ public:
 	// Begin UObject interface
 	virtual void Serialize( FArchive& ar ) override;
 	virtual void PostLoad() override;
+	virtual void BeginDestroy() override;
 	// End UObject interface
 
 	/** The state of this resource. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
 	static EResourceForm GetForm( TSubclassOf< UFGItemDescriptor > inClass );
+
+	/** In case the item is a gas form, this is the type of gas. */
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
+	static EGasType GetGasType( TSubclassOf< UFGItemDescriptor > inClass );
 
 	/** Energy value for this resource if used as fuel. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
@@ -206,6 +225,14 @@ public:
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
 	static void GetDescriptorStatBars( TSubclassOf< UFGItemDescriptor > inClass, TArray<FDescriptorStatBar>& out_DescriptorStatBars );
 
+	/** Should we consider this item as an "alien item"? It is used purely for cosmetic purposes (visual effects) in the UI. */
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
+	static bool IsAlienItem( TSubclassOf< UFGItemDescriptor > inClass );
+
+	/** Return the inventory settings widget for this item descriptor*/
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
+	static void GetInventorySettingsWidget( TSubclassOf< UFGItemDescriptor > inClass, TSubclassOf<class UFGInventorySettingsWidget>& out_InventorySettingsWidget );
+
 	/** The static mesh we want for representing the resource when they are in the production line.
 	 * @return The items mesh; a default mesh if the item has no mesh specified, nullptr if inClass is nullptr. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
@@ -230,11 +257,6 @@ public:
 	/** Returns if we should store if this item ever has been picked up  */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item" )
 	static bool RememberPickUp( TSubclassOf< UFGItemDescriptor > inClass );
-
-	/** Returns the item category */
-	UE_DEPRECATED(4.26, "Use GetCategory instead")
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Item",  meta = ( DeprecatedFunction, DeprecationMessage = "GetItemCategory is deprecated, use GetCategory instead" ) )
-	static TSubclassOf< class UFGItemCategory > GetItemCategory( TSubclassOf< UFGItemDescriptor > inClass );
 
 	/** Get the category for this descriptor. */
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|Organization" )
@@ -297,12 +319,21 @@ public:
 	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor|CompatibleType" )
 	static FColor GetScannerLightColor( TSubclassOf< UFGItemDescriptor > inClass );
 
+	/** Returns true if this item needs a pick-up marker spawned when it is dropped on the ground */
+	UFUNCTION( BlueprintPure, Category = "FactoryGame|Descriptor" )
+	static bool NeedsPickupMapMarker( TSubclassOf<UFGItemDescriptor> inClass );
+
 	/**
 	 * Set array index used by the conveyor item renderer subsystem.
 	 * Should only be called in runtime and by the conveyor renderer, will write to the mutable default object.
 	 */
 	FORCEINLINE static void SetItemEncountered( TSubclassOf<UFGItemDescriptor> Class, int32 Index );
 	FORCEINLINE static int32 IsItemEncountered( TSubclassOf<UFGItemDescriptor> Class );
+
+	/** Returns true if this item descriptor can be picked up and stored in player inventory. i.e if its a solid and not a building or other non pickupable item
+	 *  If it's a non pickupable class we will return false in the overridden Internal_CanItemBePickedup */
+	static bool CanItemBePickedup( TSubclassOf< UFGItemDescriptor > inClass );
+	static bool CanItemBePickedup( UFGItemDescriptor* inClass );
 
 protected:
 	/** Internal function to get the display name. */
@@ -316,6 +347,8 @@ protected:
 	
 	virtual UTexture2D* Internal_GetSmallIcon() const;
 	virtual UTexture2D* Internal_GetBigIcon() const;
+	
+	FORCEINLINE virtual bool Internal_CanItemBePickedup() const { return mForm == EResourceForm::RF_SOLID; }
 
 public:
 	/**
@@ -367,6 +400,10 @@ protected:
 	UPROPERTY( EditDefaultsOnly, Category = "Item" )
 	EResourceForm mForm;
 
+	/** In case this item is a gas type, this represents the type of gas. */
+	UPROPERTY( EditDefaultsOnly, Category = "Item", meta = ( EditCondition="mForm == EResourceForm::RF_GAS", EditConditionHides ) )
+	EGasType mGasType;
+
 	/** Small icon of the item, always in memory */
 	UPROPERTY( EditDefaultsOnly, Category="UI", meta = ( AddAutoJSON = true ) )
 	UTexture2D* mSmallIcon;
@@ -377,11 +414,19 @@ protected:
 
 	/** The crosshair material used with this item */
 	UPROPERTY( EditDefaultsOnly, Category = "UI" )
-	TAssetPtr<UMaterialInterface> mCrosshairMaterial;
+	TSoftObjectPtr<UMaterialInterface> mCrosshairMaterial;
 
 	/** This is just enums mapped to arbitrary values meant to represent this item descriptors capabilities when we show it in the UI. This has no effect on game logic */
 	UPROPERTY( EditDefaultsOnly, Category="UI" )
 	TArray< FDescriptorStatBar > mDescriptorStatBars;
+
+	/** Should we consider this item as an "alien item"? It is used purely for cosmetic purposes (visual effects) in the UI. */
+	UPROPERTY( EditDefaultsOnly, Category="UI" )
+	bool mIsAlienItem;
+
+	/** The inventory settings widget we want to show to modifying settings for an item in an equipment slot  */
+	UPROPERTY( EditDefaultsOnly, Category="UI" )
+	TSubclassOf<class UFGInventorySettingsWidget> mInventorySettingsWidget;
 
 	/** The static mesh we want for representing the resource when they are in the production line. */
 	UPROPERTY( EditDefaultsOnly, Category = "Item" )
@@ -442,6 +487,9 @@ protected:
 	/** Scanner light color that shows up in the hand scanner. This is an FColor since it was and FColor in the old struct used for scanning. */
 	UPROPERTY( EditDefaultsOnly, Category = "Scanning" )
 	FColor mScannerLightColor;
+	/** True if this item needs a marker on the map when it is dropped */
+	UPROPERTY( EditDefaultsOnly, Category = "Item" )
+	bool mNeedsPickUpMarker;
 	
 	/**
 	 * This is just a hook for the resource sink points so we can add them to the 
@@ -458,14 +506,18 @@ public:
 	FColor FluidColor() const	{ return mFluidColor; }
 	FColor GasColor() const		{ return mGasColor; }
 	EResourceForm Form() const	{ return mForm; }
+	EGasType GasType() const	{ return mGasType; }
 
-private:
+	FORCEINLINE int32 GetConveyorRendererItemIndex() const { return mItemIndex;}
+
 	/**
-	 * Index used by the conveyor item subsystem.
-	 * Written onto the mutable default object.
-	 */
-	UPROPERTY( Transient )
-	int32 mItemIndex;
+     * Index used by the conveyor item subsystem.
+     * Written onto the mutable default object.
+     */
+    UPROPERTY( Transient )
+    int32 mItemIndex = INDEX_NONE;
+private:
+
 
 	friend class FItemDescriptorDetails;
 	friend class FFGItemDescriptorPropertyHandle;

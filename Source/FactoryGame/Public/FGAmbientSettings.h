@@ -3,6 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "AkRtpc.h"
 #include "UObject/Object.h"
 #include "FGAmbientSettings.generated.h"
 
@@ -18,7 +19,7 @@ public:
 	class UAkAudioEvent* GetEnterOuterVolumeEvent() const;
 
 	/** Get the event that is played whenever you get close to the ambient volume */
-	UFUNCTION( BlueprintNativeEvent, CustomEventUsing = mHave_GetEnterOuterVolumeEvent, Category = "Audio" )
+	UFUNCTION( BlueprintNativeEvent, CustomEventUsing = mHave_GetEnterInnerVolumeEvent, Category = "Audio" )
 	class UAkAudioEvent* GetEnterInnerVolumeEvent() const;
 
 	/** Called when we are getting close to the attenuation radius of the ambient volume */
@@ -41,6 +42,12 @@ public:
 	UFUNCTION( BlueprintNativeEvent, CustomEventUsing = mHave_ShouldIgnoreListenerRotation, Category = "Audio" )
 	bool ShouldIgnoreListenerRotation() const;
 
+	UPROPERTY( EditDefaultsOnly, Category = "Audio" )
+	UAkRtpc* mCaveRTPC = nullptr ;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	float mCaveRTPCValue = 0;
+	
 #if WITH_EDITOR
 	// Check for errors in the settings
 	virtual void CheckForErrors();

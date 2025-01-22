@@ -3,7 +3,10 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "UObject/Interface.h"
 #include "FGRecipeProducerInterface.generated.h"
+
+class UFGItemDescriptor;
 
 /**
  * Interface to identify classes that can produce recipies, e.g. buildgun, manufacturer, workbench.
@@ -18,4 +21,8 @@ class FACTORYGAME_API UFGRecipeProducerInterface : public UInterface
 class FACTORYGAME_API IFGRecipeProducerInterface
 {
 	GENERATED_IINTERFACE_BODY()
+
+	/** Called on the Class Default Object of the Recipe Producer to determine which Item Descriptor it maps to. Should not modify the object. */
+	UFUNCTION( BlueprintNativeEvent, Category = "Recipe Producer Interface" )
+	TSubclassOf<UFGItemDescriptor> GetRecipeProducerItemDescriptor( UObject* WorldContext ) const;
 };

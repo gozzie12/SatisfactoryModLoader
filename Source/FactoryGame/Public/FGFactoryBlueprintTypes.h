@@ -6,7 +6,9 @@
 #include "CoreMinimal.h"
 #include "Resources/FGBuildDescriptor.h"
 #include "FGCategory.h"
+#include "FGIconLibrary.h"
 #include "FGInventoryComponent.h"
+#include "FGObjectReference.h"
 #include "Resources/FGItemDescriptor.h"
 #include "ItemAmount.h"
 #include "FGFactoryBlueprintTypes.generated.h"
@@ -18,6 +20,7 @@ struct FACTORYGAME_API FBlueprintConfigVersion
 		InitialVersion,
 		AddedMD5Hash,
 		RemovedMD5Hash,
+		AddedIconLibraryPath,
 		VersionPlusOne,
 		LatestVersion = VersionPlusOne - 1
 	};
@@ -27,7 +30,7 @@ struct FACTORYGAME_API FBlueprintConfigVersion
 
 
 USTRUCT( BlueprintType )
-struct FBlueprintSubCategoryRecord
+struct FACTORYGAME_API FBlueprintSubCategoryRecord
 {
 	GENERATED_BODY()
 public:
@@ -35,17 +38,17 @@ public:
 	FString SubCategoryName;
 
 	UPROPERTY( SaveGame )
-	float MenuPriority;
+	float MenuPriority = 0.f;
 
 	UPROPERTY( SaveGame )
-	uint8 IsUndefined;
+	uint8 IsUndefined = false;
 
 	UPROPERTY( SaveGame )
 	TArray< FString > BlueprintNames;
 };
 
 USTRUCT( BlueprintType )
-struct FBlueprintCategoryRecord
+struct FACTORYGAME_API FBlueprintCategoryRecord
 {
 	GENERATED_BODY()
 public:
@@ -66,14 +69,13 @@ public:
 };
 
 USTRUCT( BlueprintType )
-struct FBlueprintRecord
+struct FACTORYGAME_API FBlueprintRecord
 {
 	GENERATED_BODY()
 public:
 	FBlueprintRecord() :
 		BlueprintName( "" ),
 		BlueprintDescription( "" ),
-		IconID( -1 ),
 		Color( FLinearColor::Black ),
 		Category( nullptr ),
 		SubCategory( nullptr ),
@@ -83,25 +85,25 @@ public:
 
 	bool IsValid() const { return !BlueprintName.IsEmpty(); }
 	
-	UPROPERTY( BlueprintReadWrite, Category="Blueprint Record")
+	UPROPERTY( SaveGame, BlueprintReadWrite, Category="Blueprint Record")
 	FString BlueprintName;
 
-	UPROPERTY( BlueprintReadWrite, Category="Blueprint Record")
+	UPROPERTY( SaveGame,  BlueprintReadWrite, Category="Blueprint Record")
 	FString BlueprintDescription;
 
-	UPROPERTY( BlueprintReadWrite, Category="Blueprint Record")
-	int32 IconID;
+	UPROPERTY(  SaveGame, BlueprintReadWrite, Category="Blueprint Record")
+	FPersistentGlobalIconId IconID;
 
-	UPROPERTY( BlueprintReadWrite, Category="Blueprint Record")
+	UPROPERTY(  SaveGame, BlueprintReadWrite, Category="Blueprint Record")
 	FLinearColor Color;
 	
-	UPROPERTY(BlueprintReadWrite, Category="Blueprint Record" )
+	UPROPERTY( SaveGame, NotReplicated, BlueprintReadWrite, Category="Blueprint Record" )
 	class UFGBlueprintCategory* Category;
 
-	UPROPERTY(BlueprintReadWrite, Category="Blueprint Record" )
+	UPROPERTY( SaveGame, NotReplicated, BlueprintReadWrite, Category="Blueprint Record" )
 	class UFGBlueprintSubCategory* SubCategory;
 
-	UPROPERTY(BlueprintReadWrite, Category="Blueprint Record" )
+	UPROPERTY( SaveGame, BlueprintReadWrite, Category="Blueprint Record" )
 	int32 Priority;
 	
 	int32 ConfigVersion;
@@ -162,7 +164,7 @@ struct TStructOpsTypeTraits< FBlueprintItemAmount > : public TStructOpsTypeTrait
 
 
 USTRUCT(  BlueprintType )
-struct FBlueprintHeader
+struct FACTORYGAME_API FBlueprintHeader
 {
 	GENERATED_BODY()
 
@@ -185,6 +187,20 @@ public:
 	};
 	
 	FBlueprintHeader() {}
+
+	// When overwriting a blueprint, we need to update the cached header with the "new" headers data so serialization is correct
+	void UpdateHeaderDataWithNewData( FBlueprintHeader& newHeader )
+	{
+		SaveVersion = newHeader.SaveVersion;
+		BuildVersion = newHeader.BuildVersion;
+		Dimensions = newHeader.Dimensions;
+		Cost.Reset();
+		Cost.Append( newHeader.Cost );
+		Recipes.Reset();
+		Recipes.Append( newHeader.Recipes );
+		RecipeRefs.Reset();
+		RecipeRefs.Append( newHeader.RecipeRefs );
+	}
 
 	// @todoBlueprint - Probably want more sophisticated checking of validity
 	bool IsValid() const { return !BlueprintName.IsEmpty(); }
@@ -267,7 +283,7 @@ public:
 	FIntVector GetDimensionsOnInstance() { return mDimensions; }
 
 	UFUNCTION( BlueprintPure, Category="FactoryGame|Descriptor|Blueprint" )
-	FBlueprintRecord GetDescriptorAsRecord();
+	FBlueprintRecord GetDescriptorAsRecord() const;
 	
 	UFUNCTION( BlueprintPure, Category="FactoryGame|Category|Blueprint")
 	int32 GetIconID() const { return mIconID; }
@@ -368,7 +384,7 @@ public:
 
 
 UCLASS()
-class UFGBlueprintCategory : public UFGCategory
+class FACTORYGAME_API UFGBlueprintCategory : public UFGCategory
 {
 	GENERATED_BODY()
 public:
@@ -403,18 +419,21 @@ public:
 	
 	UFUNCTION( BlueprintPure, Category="FactoryGame|Category|Blueprint" )
 	FORCEINLINE int32 GetIconIdFromInstance() const { return mIconID; }
-
-	template< typename typeOne, typename typeTwo >
-	static bool AreNamesConsideredEqual( const typeOne& A, const typeTwo& B )
+	
+	static bool AreNamesConsideredEqual( const FText& A, const FText& B )
 	{
 		return A.ToLower().EqualTo( B.ToLower() );
 	}
+	static bool AreNamesConsideredEqual( const FString& A, const FString& B )
+	{
+		return A.ToLower().Equals( B.ToLower() );
+	}
 	
-	FORCEINLINE UFGBlueprintSubCategory* GetSubCategoryByName( FText name )
+	FORCEINLINE UFGBlueprintSubCategory* GetSubCategoryByNameAndPriority( FString nameStr, float priority )
 	{
 		for( UFGBlueprintSubCategory* subCategory : mSubCategories )
 		{
-			if( AreNamesConsideredEqual(name, subCategory->GetCategoryNameFromInstance() ) )
+			if( AreNamesConsideredEqual(nameStr, subCategory->GetCategoryNameFromInstanceAsString() ) && subCategory->GetMenuPriorityFromInstance() == priority )
 			{
 				return subCategory;
 			}

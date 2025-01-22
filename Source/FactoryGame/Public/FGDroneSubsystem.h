@@ -15,9 +15,27 @@ struct FDroneStationData
 {
 	GENERATED_BODY()
 
+	FDroneStationData() :
+		Station( nullptr ),
+		IsOrigin( false ),
+		IsPairedToOrigin( false ),
+		IsPairedFromOrigin( false ),
+		Distance( 0.0f )
+	{
+	}
+
+	FDroneStationData( TObjectPtr<AFGDroneStationInfo> station, bool isOrigin, bool isPairedToOrigin, bool isPairedFromOrigin, float distance ) :
+		Station( station ),
+		IsOrigin( isOrigin ),
+		IsPairedToOrigin( isPairedToOrigin ),
+		IsPairedFromOrigin( isPairedFromOrigin ),
+		Distance( distance )
+	{
+	}
+	
 	/**  */
 	UPROPERTY( BlueprintReadOnly )
-	class AFGDroneStationInfo* Station;
+	TObjectPtr<AFGDroneStationInfo> Station;
 
 	/**  */
 	UPROPERTY( BlueprintReadOnly )
@@ -54,8 +72,13 @@ public:
 	static AFGDroneSubsystem* Get( UObject* worldContext );
 
 	// Begin AActor interface
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
+	virtual void Tick( float DeltaSeconds ) override;
 	// End AActor interface
+
+	FORCEINLINE const TArray< class AFGDroneVehicle* >& GetAllDrones() const { return mDrones; }
+	FORCEINLINE const TArray< class AFGDroneStationInfo* >& GetAllStations() const { return mStations; }
 
 	/**
 	 * Adds a drone station to the subsystem
@@ -67,24 +90,66 @@ public:
 	 */
 	void RemoveStation( class AFGBuildableDroneStation* station );
 
+	/**
+	 * Registers a drone to the subsystem
+	 */
+	void RegisterDrone( class AFGDroneVehicle* drone );
+
+	/**
+	 * Unregisters a drone from the subsystem
+	 */
+	void UnregisterDrone( class AFGDroneVehicle* drone );
+
+	/**
+	 * Registers a drone movement to the subsystem for ticking
+	 */
+	void RegisterDroneMovement( class UFGDroneMovementComponent* droneMovement );
+
+	/**
+	 * Unregisters a drone movement from the subsystem for ticking
+	 */
+	void UnregisterDroneMovement( class UFGDroneMovementComponent* droneMovement );
+
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Drones" )
 	void SearchStations( AFGDroneStationInfo* originStation, AFGDroneStationInfo* hostStation, FString filter, bool connectionsOnly, bool excludeOrigin, bool pairedFirst, bool includeEmptyStation, TArray< FDroneStationData >& result );
 
 	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Drones" )
 	void Server_PairStations( AFGDroneStationInfo* origin, AFGDroneStationInfo* target );
 
-	void SetUniqueStationName( AFGDroneStationInfo* stationInfo, const FString& prefix ) const;
+	/** Give this station an initial name. */
+	void SetInitialStationName( AFGDroneStationInfo* stationInfo );
+
+	/** Set the name of this station. */
+	void SetStationName( AFGDroneStationInfo* stationInfo, const FString& newName );
+	
+	/** Generates a new name for a drone station. */
+	FText GenerateStationName() const;
+
+	/** @return If the station name is available; false if another station with this name already exists. */
+	bool IsStationNameAvailable( const FString& name ) const;
+	
+private:
+	void InitializeStationNames();
+
+	void UpdatePhysics( FPhysScene* physScene, float dt );
+	void TickDroneMovement( float DeltaSeconds );
 
 private:
-	bool TrySetStationName( AFGDroneStationInfo* stationInfo, const FString& name ) const;
-
-private:
+	FDelegateHandle OnPhysSceneStepHandle;
+	
 	/** All the drone stations in the world */
 	UPROPERTY( Replicated )
-	TArray< AFGDroneStationInfo* > mStations;
+	TArray< class AFGDroneStationInfo* > mStations;
 
-	/** What new drone stations should be called by default excluding unique number. */
-	UPROPERTY( EditDefaultsOnly, Category = "Drone Station" )
-	FString mDroneStationDefaultNamePrefix = "Drone Port";
+	/** All the drones in the world */
+	UPROPERTY( Replicated )
+	TArray< class AFGDroneVehicle* > mDrones;
 
+	/** All the drone movement components which need ticking. */
+	UPROPERTY()
+	TArray< class UFGDroneMovementComponent* > mTickingMovementComponents;
+
+	/** A random name is picked from here when placing a stop. */
+	UPROPERTY()
+	TArray< FString > mStationNames;
 };

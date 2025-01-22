@@ -3,6 +3,7 @@
 
 #include "AbstractInstanceExampleActor.h"
 #include "AbstractInstanceManager.h"
+#include "Engine/World.h"
 
 // Sets default values
 AAbstractInstanceExampleActor::AAbstractInstanceExampleActor()

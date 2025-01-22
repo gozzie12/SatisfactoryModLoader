@@ -3,27 +3,26 @@
 #pragma once
 
 #include "FactoryGame.h"
+#include "FGPowerCircuit.h"
 #include "FGSubsystem.h"
 #include "FGSaveInterface.h"
 #include "Buildables/FGBuildableCircuitBridge.h"
 #include "UI/Message/FGMessageBase.h"
 #include "FGCircuitSubsystem.generated.h"
 
-/**
- * Message to be displayed when the sum stored battery power of a circuit has had a certain share depleted
- */
-UCLASS( Blueprintable )
-class FACTORYGAME_API UFGCriticalBatteryDepletionMessage : public UFGMessageBase
+DECLARE_STATS_GROUP( TEXT( "CircuitSubsystem" ), STATGROUP_CircuitSubsystem, STATCAT_Advanced );
+
+USTRUCT()
+struct FPowerCircuitFuseStabilityData
 {
 	GENERATED_BODY()
-public:
-	UFGCriticalBatteryDepletionMessage();
 
-	UFUNCTION( BlueprintPure, Category = "FactoryGame|Circuits|Power" )
-	float GetCriticalBatteryDepletionPercent() const { return mCriticalBatteryDepletionPercent; }
-
-private:
-	float mCriticalBatteryDepletionPercent = 0.0f;
+	UPROPERTY()
+	TObjectPtr< AFGPlayerController > FuseResetInstigator = nullptr;
+	
+	int32 CircuitID;
+		
+	FTimerHandle TimerHandle;
 };
 
 /**
@@ -35,12 +34,12 @@ class FACTORYGAME_API AFGCircuitSubsystem : public AFGSubsystem, public IFGSaveI
 	GENERATED_BODY()
 public:
 	AFGCircuitSubsystem();
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	/** Replication. */
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
-	virtual bool ReplicateSubobjects( class UActorChannel* channel, class FOutBunch* bunch, FReplicationFlags* repFlags ) override;
 	virtual void PreReplication( IRepChangedPropertyTracker& ChangedPropertyTracker ) override;
-	virtual void CallPreReplication(UNetDriver* NetDriver) override;
 
 	/** Get the circuit subsystem. */
 	static AFGCircuitSubsystem* Get( UWorld* world );
@@ -61,6 +60,7 @@ public:
 
 	// Begin AActor interface
 	virtual void Serialize( FArchive& ar ) override;
+	static void AddReferencedObjects(UObject* InThis, FReferenceCollector& Collector);
 	virtual void BeginPlay() override;
 	virtual void Tick( float DeltaSeconds ) override;
 	// End AActor interface
@@ -132,15 +132,23 @@ public:
 	 */
 	void RemoveCircuitBridge( TWeakObjectPtr< AFGBuildableCircuitBridge > circuitBridge );
 
+	/**
+	 * @param circuitGroupId Must be a valid circuit group id.
+	 * @return the circuit group with the given id.
+	 */
 	class UFGCircuitGroup* GetCircuitGroup( int32 circuitGroupId ) { return mCircuitGroups[ circuitGroupId ]; }
 
 	/** Called when a power circuit lost power. */
-	UFUNCTION( BlueprintImplementableEvent, Category = "FactoryGame|Circuits|Power" )
-	void PowerCircuit_OnFuseSet();
+	UFUNCTION( BlueprintNativeEvent, Category = "FactoryGame|Circuits|Power" )
+	void PowerCircuit_OnFuseSet( const TArray< class UFGPowerCircuit* >& circuits );
+
+	/** Called when a power circuit had it's power restored. */
+	UFUNCTION( BlueprintNativeEvent, Category = "FactoryGame|Circuits|Power" )
+	void PowerCircuit_OnFuseReset( const TArray< class UFGPowerCircuit* >& circuits, class AFGPlayerController* fuseResetInstigator = nullptr );
 
 	/** Called when a power circuit had it's power restored. */
 	UFUNCTION( BlueprintImplementableEvent, Category = "FactoryGame|Circuits|Power" )
-	void PowerCircuit_OnFuseReset();
+	void PowerCircuit_OnPrioritySwitchesTurnedOff( int32 priority );
 
 	/** Called when the batteries have depleted a certain share of their capacity. */
 	UFUNCTION( BlueprintImplementableEvent, Category = "FactoryGame|Circuits|Power" )
@@ -149,14 +157,25 @@ public:
 	/** Allow power circuits to keep track of all the */
 	void PowerCircuit_RegisterPriorityPowerSwitchInfo( class AFGPriorityPowerSwitchInfo* info );
 	void PowerCircuit_UnregisterPriorityPowerSwitchInfo( class AFGPriorityPowerSwitchInfo* info );
+	
+	/** Get all the other power switch infos. Not only the ones belonging to this circuit. Can be called on Client and Server. */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Circuits|Power" )
 	TArray< AFGPriorityPowerSwitchInfo* > PowerCircuit_GetPriorityPowerSwitchInfos() const;
-
+	
+	/** Helper to sort a list of infos by their given name in ascending order. Can be called on Client and Server. */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Circuits|Power" )
+	void PowerCircuit_SortPriorityPowerSwitchInfos( TArray< AFGPriorityPowerSwitchInfo* >& infos ) const;
+	
+	/** Switch all the priority switches in the given priority to on or off. Only valid to call on Server. */
+	UFUNCTION( BlueprintCallable, Category = "FactoryGame|Circuits|Power" )
+	void PowerCircuit_SetPrioritySwitchGroupOn( int32 priority, bool on );
+	
 	/** Debugging function to dump stats of all circuits to the log */
 	void Debug_DumpCircuitsToLog();
 
-	/** Event that will fire whenever one or more circuits have changed */
-	DECLARE_EVENT( AFGCircuitSubsystem, FOnCircuitsChanged )
-	FOnCircuitsChanged OnCircuitsChangedEvent;
+	void ClearAllTimers();
+
+	void StableCircuitCallback( const FPowerCircuitFuseStabilityData circuitStabilityData );
 	
 private:
 	/** Let the clients know about changes in the circuits. */
@@ -186,47 +205,87 @@ private:
 	/** Removes a connection component from it's circuit. If the connection component does not have a valid circuit ID this does nothing. */
 	void RemoveComponentFromCircuit( class UFGCircuitConnectionComponent* component );
 
+	/** Called when a power circuit is considered stable. */
+	void OnPowerCircuitStable( AFGPlayerController* fuseResetInstigator ) const;
+
+	void RemovePowerCircuitStabilityData( int32 circuitID );
+
 public:
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnPowerPrioritySwitchAdded, class AFGPriorityPowerSwitchInfo*, info );
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnStructuralChange );
+	
 	/**
 	 * Power circuits: the share of the battery capacity that can be depleted before a warning is raised, in the interval [0.0, 1.0].
 	 */
-	UPROPERTY( EditDefaultsOnly, Category = "Power Circuit")
+	UPROPERTY( EditDefaultsOnly, Category = "Power Circuit" )
 	float mCriticalBatteryDepletionPercent = 0.25f;
 
 	/**
 	 * Power circuits: the minimum time that has to pass between battery warnings, in minutes.
 	 */
-	UPROPERTY( EditDefaultsOnly, Category = "Power Circuit")
+	UPROPERTY( EditDefaultsOnly, Category = "Power Circuit" )
 	float mMinimumBatteryWarningInterval = 10.0f;
+	
+	/** Called when a switch has been added, on both server and client. */
+	UPROPERTY( BlueprintAssignable, Category = "Power Circuit" )
+	FOnPowerPrioritySwitchAdded mOnPowerPrioritySwitchAddedDelegate;
 
+	/**
+	 * Called when structural changes occured in the circuits. Server and Client.
+	 * This can happen for example when a wire is added or removed.
+	 * If this is triggered then OnCircuitGroupsRebuilt will also be triggered, but not the other way around.
+	 */
+	UPROPERTY( BlueprintAssignable, Category = "Circuit" )
+	FOnStructuralChange mOnCircuitsRebuiltDelegate;
+	/**
+	 * Called when structural changes occured in the circuit groups. Server and Client.
+	 * Called when structural changes occured in the circuit groups. Server and Client.
+	 * This can happen when a circuit is rebuilt or when a switch is flipped.
+	 */
+	UPROPERTY( BlueprintAssignable, Category = "Circuit" )
+	FOnStructuralChange mOnCircuitGroupsRebuiltDelegate;
+	
 private:
 	/** Map with all circuits and the circuit ID as the key. */
 	UPROPERTY()
 	TMap< int32, class UFGCircuit* > mCircuits;
 
-	/** @todo There is no support for TMap replication, fix something better than this. */
+	//@todo-power This name is misleading now, but hey it works. This is rebuild or changed.
+	/** Set if the circuits have been rebuilt this frame so we know if we need to trigger any delegates. */
+	bool mHaveCircuitsBeenRebuilt;
+
+	/** There is no support for TMap replication so this is a duplicate of mCircuits in a simple array. */
 	UPROPERTY( ReplicatedUsing = OnRep_ReplicatedCircuits )
 	TArray< class UFGCircuit* > mReplicatedCircuits;
 
 	/** Counter for generating new circuit ids. */
 	int32 IDCounter;
-
+	
 	/**
 	 * List of all the circuit bridges. They work as delimiters of circuits.
 	 * If they are on, they are not delimiters of circuit groups. If they are off, they are delimiter of circuit groups.
 	 */
 	TSet< TWeakObjectPtr< AFGBuildableCircuitBridge > > mCircuitBridges;
-	bool mIsCircuitGroupsDirty;
 
-	/**
-	 * A list of circuits groups. Circuit groups logically work as one circuit.
-	 */
+	/** A list of circuits groups. Circuit groups logically work as one circuit. */
 	UPROPERTY()
 	TArray< class UFGCircuitGroup* > mCircuitGroups;
 
-	/**
-	 * Power circuits: all the priority switches in the world.
-	 */
-	UPROPERTY()
+	/** Used to keep track of rebuilds during tick. */
+	bool mAreCircuitGroupsDirty;
+	
+	/** Set if the circuit groups have been rebuilt this frame so we know if we need to trigger any delegates. */
+	bool mHaveCircuitGroupsBeenRebuilt;
+
+	/** Power circuits: all the priority switches in the world. */
+	UPROPERTY( Replicated )
 	TArray< class AFGPriorityPowerSwitchInfo* > mPriorityPowerSwitchInfos;
+
+	/** Power circuits: Fuse stability timer data. Key is Circuit ID */
+	UPROPERTY()
+	TMap< int32, FPowerCircuitFuseStabilityData > mPowerCircuitStabilityData;
+
+	/** The amount of time to wait before a power circuit is considered "stable" after resetting the fuse. */
+	UPROPERTY( EditDefaultsOnly, Category = "Power Circuit" )
+	float mPowerCircuitStabilityTimeRequirement;
 };

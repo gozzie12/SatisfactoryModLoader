@@ -4,41 +4,50 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
 #include "FGWorldScannableData.generated.h"
 
+class AFGCreature;
+class AFGCreatureSpawner;
 
 USTRUCT()
 struct FWorldScannableData
 {
 	GENERATED_BODY()
 
-	FWorldScannableData(){}
-	FWorldScannableData( AActor* actor );
+	FWorldScannableData() = default;
+#if WITH_EDITOR
+	explicit FWorldScannableData( const AActor* actor );
+	explicit FWorldScannableData( const class FWorldPartitionActorDesc* ActorDesc, int32 PIEInstanceIndex = INDEX_NONE );
+#endif
 
-	/* FObjectReferenceDisc isn't a UStruct and thereby can't be a UProperty so let's save it as a string to avoid custom serializing. */
-	UPROPERTY( VisibleAnywhere )
-	FString ObjectReferenceDiscAsString;
+	UPROPERTY( VisibleAnywhere, Category = "Scannable Data" )
+	TSoftObjectPtr<AActor> Actor;
 
-	UPROPERTY( VisibleAnywhere )
-	TSubclassOf< class AActor > ActorClass;
+	UPROPERTY( VisibleAnywhere, Category = "Scannable Data" )
+	FGuid ActorGuid{};
 
-	UPROPERTY( VisibleAnywhere )
-	FVector ActorLocation;
-	
+	UPROPERTY( VisibleAnywhere, Category = "Scannable Data" )
+	TSubclassOf<AActor> ActorClass;
+
+	UPROPERTY( VisibleAnywhere, Category = "Scannable Data" )
+	FVector ActorLocation{ForceInit};
 };
 
-UCLASS( BlueprintType, Blueprintable )
-class FACTORYGAME_API UFGWorldScannableData : public UDataAsset
+USTRUCT()
+struct FCreatureSpawnerWorldScannableData : public FWorldScannableData
 {
 	GENERATED_BODY()
 
-public:
-	UPROPERTY( VisibleAnywhere )
-	TArray<FWorldScannableData> mItemPickups;
-
+	FCreatureSpawnerWorldScannableData() = default;
 #if WITH_EDITOR
-	void GenerateWorldScannableData( UWorld* world );
+	explicit FCreatureSpawnerWorldScannableData( const AFGCreatureSpawner* actor );
+	explicit FCreatureSpawnerWorldScannableData( const class FWorldPartitionActorDesc* ActorDesc, int32 PIEInstanceIndex = INDEX_NONE );
 #endif
+
+	/** Class of the creature that is spawned by this spawner */
+	UPROPERTY( VisibleAnywhere, Category = "Scannable Data" )
+	TSoftClassPtr<AFGCreature> CreatureClass;
 };
 
 UCLASS()
@@ -49,10 +58,24 @@ class FACTORYGAME_API AFGWorldScannableDataGenerator : public AActor
 public:	
 	AFGWorldScannableDataGenerator();
 
+	// Begin AActor interface
+	virtual void BeginPlay() override;
+	virtual void PreSave(FObjectPreSaveContext SaveContext) override;
+	// End AActor interface
 private:
 #if WITH_EDITOR
-	UFUNCTION( BlueprintCallable, Category = "World Grid", meta = ( CallInEditor = "true" ) )
-	void GenerateWorldScannableData();
+	void CacheWorldScannableData();
 #endif
+public:
+	/** Item pickups that were found in the world */
+	UPROPERTY()
+	TArray<FWorldScannableData> mItemPickups;
 
+	/** Drop pods that were found in the world */
+	UPROPERTY()
+	TArray<FWorldScannableData> mDropPods;
+
+	/** Creature spawners that were found in the world */
+	UPROPERTY()
+	TArray<FCreatureSpawnerWorldScannableData> mCreatureSpawners;
 };

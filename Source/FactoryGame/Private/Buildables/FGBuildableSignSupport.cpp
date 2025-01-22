@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "FGColoredInstanceMeshProxy.h"
 #include "Hologram/FGSignPoleHologram.h"
+#include "Net/UnrealNetwork.h"
 
 AFGBuildableSignSupport::AFGBuildableSignSupport() : Super() {
 	this->mPoleComponentProxy = CreateDefaultSubobject<UFGColoredInstanceMeshProxy>(TEXT("PoleComponentProxy"));
@@ -18,6 +19,8 @@ void AFGBuildableSignSupport::GetLifetimeReplicatedProps(TArray< FLifetimeProper
 	DOREPLIFETIME(AFGBuildableSignSupport, mHeight);
 	DOREPLIFETIME(AFGBuildableSignSupport, mPoleMesh);
 }
-void AFGBuildableSignSupport::BeginPlay(){ }
+void AFGBuildableSignSupport::BeginPlay(){ Super::BeginPlay(); }
 void AFGBuildableSignSupport::SetPoleScale(FVector2D poleScale){ }
+void AFGBuildableSignSupport::OnBuildEffectActorFinished(){ }
+TArray<struct FInstanceData> AFGBuildableSignSupport::GetActorLightweightInstanceData_Implementation(){ return TArray<struct FInstanceData>(); }
 const FName AFGBuildableSignSupport::PoleMeshName = FName();

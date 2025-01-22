@@ -163,55 +163,66 @@ struct FACTORYGAME_API FScannableDetails
 	
 };
 
+/** Details that are needed by the object scanner to track a potentially unloaded actor */
+USTRUCT()
+struct FACTORYGAME_API FScannableActorDetails
+{
+	GENERATED_BODY()
+
+	FScannableActorDetails() = default;
+	explicit FScannableActorDetails( AActor* actor );
+	explicit FScannableActorDetails( const struct FWorldScannableData& scannableData );
+
+	FORCEINLINE bool IsValidDetails() const { return !Actor.IsNull(); }
+
+	friend bool operator==(const FScannableActorDetails& A, const FScannableActorDetails& B)
+	{
+		return A.Actor == B.Actor;
+	}
+
+	/** Returns actor location if the actor is loaded, or cached actor location if not */
+	FVector GetActorLocation() const;
+
+	/** Soft pointer to the actor in world. The actor might not be streamed in yet */
+	UPROPERTY()
+	TSoftObjectPtr<AActor> Actor;
+	
+	/** Location of the actor in world. If the actor is loaded, it's location is preferred to this value */
+	UPROPERTY()
+	FVector ActorLocation{ForceInit};
+};
 
 /**
- * 
+ * Base class for a scanning logic for a particular item descriptor
  */
 UCLASS( BlueprintType )
 class FACTORYGAME_API UFGScannableDetails : public UObject
 {
 	GENERATED_BODY()
-
 public:
-	virtual void ScanForObjects( const FVector2D scanLocation, const float scanRadius, TArray<FScannedActor>& out_ScannedObjects );
-	virtual void ScanForObjects( const FVector2D scanLocation, const float scanRadius, TMap<TSubclassOf<AActor>, int32>& out_foundActorCount );
-	virtual TSubclassOf<AActor> GetActorClassToScanFor();
-	virtual bool CacheScannedActors() const;
-
-	virtual AActor* FindClosestRelevantActor( class UWorld* world, const FVector scanLocation, const float maxRangeSquare, TSubclassOf<AActor> actorClassToScanFor ) const;
+	virtual FScannableActorDetails FindClosestRelevantActor( class UWorld* world, const FVector& scanLocation, const float maxRangeSquare, TSubclassOf<AActor> actorClassToScanFor ) const;
 };
 
 UCLASS()
 class FACTORYGAME_API UFGScannableDetailsHostileCreature : public UFGScannableDetails
 {
 	GENERATED_BODY()
-
 public:
-	virtual AActor* FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
-
-	
+	virtual FScannableActorDetails FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
 };
 
 UCLASS()
 class FACTORYGAME_API UFGScannableDetailsRegrowingPickups : public UFGScannableDetails
 {
 	GENERATED_BODY()
-
 public:
-	virtual AActor* FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
-
-	
+	virtual FScannableActorDetails FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
 };
 
 UCLASS()
 class FACTORYGAME_API UFGScannableDetailsHarddrive : public UFGScannableDetails
 {
 	GENERATED_BODY()
-
 public:
-	virtual AActor* FindClosestRelevantActor(UWorld* world, const FVector scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
-
-	
+	virtual FScannableActorDetails FindClosestRelevantActor(UWorld* world, const FVector& scanLocation, const float maxRangeSquared, TSubclassOf<AActor> actorClassToScanFor) const override;
 };
-
-

@@ -4,10 +4,10 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-
 #include "Containers/Queue.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
+#include "UI/FGDebugOverlayWidget.h"
 #include "FGRainOcclusionActor.generated.h"
 
 class UInstancedStaticMeshComponent;
@@ -45,7 +45,7 @@ struct FSimpleComponentInfo
 	float CustomScaleAmount;
 };
 
-struct FSimpleBuildingInfo
+struct FACTORYGAME_API FSimpleBuildingInfo
 {
 	TArray< FSimpleComponentInfo > mComponentData;
 	EFGRainOcclusionShape mOcclusionType;

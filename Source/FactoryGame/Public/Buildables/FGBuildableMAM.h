@@ -4,9 +4,9 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildable.h"
-#include "FGSignificanceInterface.h"
+#include "FGBuildable.h"
 #include "FGResearchManager.h"
+#include "FGSignificanceInterface.h"
 #include "FGBuildableMAM.generated.h"
 
 /**
@@ -33,6 +33,9 @@ public:
 
 	UFUNCTION( BlueprintImplementableEvent, Category = "MAM" )
 	void ResearchStateChanged( EResearchState researchState );
+
+	UFUNCTION( BlueprintImplementableEvent, Category = "MAM" )
+	void OnResearchClaimed( TSubclassOf<class UFGSchematic> schematic );
 
 	UFUNCTION( BlueprintCallable, Category = "MAM" )
 	bool IsSignificant() const { return mIsSignificant; }

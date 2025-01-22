@@ -3,6 +3,7 @@
 #include "Buildables/FGBuildableRailroadBridge.h"
 #include "Components/SceneComponent.h"
 #include "FGSplineComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AFGBuildableRailroadBridge::AFGBuildableRailroadBridge() : Super() {
 	this->mSplineComponent = CreateDefaultSubobject<UFGSplineComponent>(TEXT("SplineComponent"));
@@ -12,4 +13,4 @@ void AFGBuildableRailroadBridge::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFGBuildableRailroadBridge, mSplineData);
 }
-void AFGBuildableRailroadBridge::BeginPlay(){ }
+void AFGBuildableRailroadBridge::BeginPlay(){ Super::BeginPlay(); }

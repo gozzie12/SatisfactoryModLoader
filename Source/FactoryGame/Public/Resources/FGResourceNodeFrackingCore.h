@@ -3,7 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Resources/FGResourceNodeBase.h"
+#include "FGResourceNodeBase.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 #include "FGResourceNodeFrackingCore.generated.h"
 
@@ -49,6 +49,8 @@ public:
 
 	bool IsAllSatellitesOccupied() const;
 
+	/** Called when satellite node's occupied status changes */
+	void OnSatelliteIsOccupiedChanged( const AFGResourceNodeFrackingSatellite* satellite );
 private:
 	TArray< TWeakObjectPtr< class AFGResourceNodeFrackingSatellite > > mSatellites;
 

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "Hologram/FGSplineHologram.h"
+#include "FGSplineHologram.h"
 #include "Components/SplineComponent.h"
 #include "FGRailroadTrackHologram.generated.h"
 
@@ -31,12 +31,13 @@ public:
 	// End AActor interface
 
 	// Begin AFGHologram interface
-	virtual class USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName ) override;
+	virtual class USceneComponent* SetupComponent( USceneComponent* attachParent, UActorComponent* componentTemplate, const FName& componentName, const FName& attachSocketName ) override;
 	virtual void SetHologramLocationAndRotation( const FHitResult& hitResult ) override;
 	virtual int32 GetBaseCostMultiplier() const override;
 	virtual void SpawnChildren( AActor* hologramOwner, FVector spawnLocation, APawn* hologramInstigator ) override;
 	virtual bool DoMultiStepPlacement(bool isInputFromARelease) override;
 	virtual void CheckBlueprintCommingling() override;
+	virtual void GetIgnoredClearanceActors( TArray< AActor* >& ignoredActors ) const override;
 	// End AFGHologram interface
 
 	// Begin AFGBuildableHologram interface
@@ -59,11 +60,8 @@ protected:
 	virtual void CheckValidFloor() override;
 	// End AFGBuildableHologram interface
 
-	// Begin AFGHologram interface
-	virtual void CheckClearance( const FVector& locationOffset ) override;
-	// End AFGHologram interface
-
 	// Begin AFGSplineHologram interface
+	virtual void UpdateClearanceData() override;
 	virtual void UpdateSplineComponent() override;
 	// End AFGSplineHologram interface
 
@@ -107,10 +105,11 @@ private:
 	class UFGRailroadTrackConnectionComponent* mConnectionComponents[ 2 ];
 
 	/** The track connection we snap when building the track. */
-	UPROPERTY()
+	UPROPERTY( CustomSerialization )
 	class UFGRailroadTrackConnectionComponent* mSnappedConnectionComponents[ 2 ];
 
 	/** The track connections to go along with the snapped connection if that one used to be a switch. */
+	UPROPERTY( CustomSerialization )
 	FConnectionComponentArrayWrapper mSnappedAdditionalConnectionComponents[ 2 ];
 
 	/** All the generated spline meshes. */

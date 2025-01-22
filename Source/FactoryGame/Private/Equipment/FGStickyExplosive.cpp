@@ -2,12 +2,13 @@
 
 #include "Equipment/FGStickyExplosive.h"
 #include "GameFramework/RotatingMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AFGStickyExplosive::AFGStickyExplosive() : Super() {
 	this->mDetonateIn = 0.0;
 	this->mEnvironmentDestructionSphere = nullptr;
 	this->mRotatingMovementComp = CreateDefaultSubobject<URotatingMovementComponent>(TEXT("RotatingMovementComponent"));
-	this->mThrowRotation = FRotator(-401.73773193359375, 50.51957702636719, -155.660888671875);
+	this->mThrowRotation = FRotator(-290.30853271484375, -24.461044311523438, -199.52513122558594);
 }
 void AFGStickyExplosive::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

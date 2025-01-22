@@ -4,12 +4,11 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildablePipelineAttachment.h"
+#include "FGBuildablePipelineAttachment.h"
 #include "FGBuildablePipelineJunction.generated.h"
 
 /**
  *	Junction class for creating splits in a pipeline network.
- *  @todo-Pipes - This class turned out to be super not needed. At least not at the moment with just the one pipe junction type. So consider for removal
  */
 UCLASS()
 class FACTORYGAME_API AFGBuildablePipelineJunction : public AFGBuildablePipelineAttachment

@@ -2,12 +2,13 @@
 #pragma once
 
 #include "FactoryGame.h"
-#include "GameFramework/Character.h"
-#include "FGSaveInterface.h"
-#include "AkAudioDevice.h"
+#include "FGClearanceInterface.h"
 #include "DamageTypes/FGDamageType.h"
-
+#include "FGSaveInterface.h"
+#include "GameFramework/Character.h"
+#include "Chaos/ChaosEngineInterface.h"
 #include "FGCharacterBase.generated.h"
+
 
 USTRUCT( BlueprintType )
 struct FACTORYGAME_API FFootstepEffect
@@ -19,11 +20,11 @@ struct FACTORYGAME_API FFootstepEffect
 
 	/** The particle to use when hitting the ground */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep" )
-	class UParticleSystem* Particle;
+	class UParticleSystem* Particle = nullptr;
 
 	/** The decal to place on the ground when walking around */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep" )
-	TArray< class UMaterialInterface* > GroundDecals;
+	TArray< class UMaterialInterface* > GroundDecals = {};
 };
 
 USTRUCT( BlueprintType )
@@ -33,11 +34,11 @@ struct FACTORYGAME_API FFootstepEffectSurface
 
 	/** The surface the foot hit */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep" )
-	TEnumAsByte<EPhysicalSurface> Surface;
+	TEnumAsByte<EPhysicalSurface> Surface = EPhysicalSurface::SurfaceType_Default;
 
 	/** The effect we want to play when hitting the surface */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep", meta = ( ShowOnlyInnerProperties ) )
-	FFootstepEffect Effect;
+	FFootstepEffect Effect = {};
 };
 
 USTRUCT( BlueprintType )
@@ -47,11 +48,11 @@ struct FACTORYGAME_API FFootstepEffectWater
 
 	/** When at this minimum water depth, then use this footstep effect instead */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep" )
-	float MinWaterDepth;
+	float MinWaterDepth = 0.f;
 
 	/** The effect we want to play when hitting the surface */
 	UPROPERTY( EditDefaultsOnly, Category = "Footstep", meta = ( ShowOnlyInnerProperties ) )
-	FFootstepEffect Effect;
+	FFootstepEffect Effect = {};
 };
 
 USTRUCT( BlueprintType )
@@ -61,7 +62,7 @@ struct FBoneDamageModifier
 
 	/** Name of the bone to apply the modifier to. Be mindful of the spelling as it won't apply if the name is wrong */
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category="Modifier")
-	FName BoneName;
+	FName BoneName = {};
 
 	/** Decided whether the modifier is additive or multiplicative */
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category="Modifier")
@@ -84,8 +85,10 @@ struct FBoneDamageModifier
 	TArray<TSubclassOf<UFGDamageType>> DamageTypesWhiteList;
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnRagdollStateChangedDelegate, const bool, IsRagdolled );
+
 UCLASS()
-class FACTORYGAME_API AFGCharacterBase : public ACharacter, public IFGSaveInterface
+class FACTORYGAME_API AFGCharacterBase : public ACharacter, public IFGSaveInterface, public IFGClearanceInterface
 {
 	GENERATED_BODY()
 public:
@@ -97,6 +100,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay( const EEndPlayReason::Type EndPlayReason ) override;
 	virtual void Tick( float deltaTime ) override;
+	virtual void CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult) override;
 
 	virtual float TakeDamage( float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser ) override;
 	// End AActor interface
@@ -121,6 +125,14 @@ public:
 	virtual bool ShouldSave_Implementation() const override;
 	// End IFSaveInterface
 
+	// Begin IFGClearanceInterface
+	virtual void GetClearanceData_Implementation( TArray< FFGClearanceData >& out_data ) const override;
+	// End IFGClearanceInterface
+
+	// Begin ACharacter interface
+	virtual void LaunchCharacter( FVector LaunchVelocity, bool bXYOverride, bool bZOverride ) override;
+	// End ACharacter interface
+	
 	/** Called when we died, need to be UFUNCTION as it's bound as a delegate */
 	UFUNCTION()
 	virtual void Died( AActor* thisActor );
@@ -143,11 +155,15 @@ public:
 
 	/** We have taken a weakspot hit */
 	UFUNCTION( BlueprintImplementableEvent, Category = "Damage", meta = ( DisplayName = "OnWeakspotHit" ) )
-	void NotifyOnWeakspotHit();
+	void NotifyOnWeakspotHit( FVector hitLocation );
 
-	/** We have taken a weakspot hit */
+	/** We have taken a armor hit */
 	UFUNCTION( BlueprintImplementableEvent, Category = "Damage", meta = ( DisplayName = "OnWeakspotHit" ) )
-	void NotifyOnArmorHit();
+	void NotifyOnArmorHit( FVector hitLocation );
+
+	/** We have taken a normal hit */
+	UFUNCTION( BlueprintImplementableEvent, Category = "Damage", meta = ( DisplayName = "OnWeakspotHit" ) )
+	void NotifyOnNormalHit( FVector hitLocation );
 
 	/** Notify from our health component*/
 	UFUNCTION()
@@ -166,6 +182,8 @@ public:
 
 	/** Return if character is ragdolled */
 	FORCEINLINE bool GetIsRagdoll() { return mIsRagdolled; }
+
+	FORCEINLINE float GetMinVehiclePushVelocityForRagdoll() const { return mMinVehiclePushVelocityForRagdoll; }
 
 	/** Calculate damage we take from a fall */
 	UFUNCTION( BlueprintNativeEvent, Category = "Damage" )
@@ -201,10 +219,6 @@ public:
 	/** @returns true if this character is alive and well, no health components means yes */
 	UFUNCTION( BlueprintPure, Category="Health")
 	bool IsAliveAndWell() const;
-
-	/** Player has collided with a vehicle and has received a push. This may be better as a general case function instead of specifically being for vehicles but it is what it is for now. */
-	UFUNCTION()
-	void PushedByVehicle( class AFGVehicle* vehicle, FVector pushVelocity );
 
 	/**
 	 * Plays the footstep effect of this character, default is: Audio, Particle and Decal
@@ -244,6 +258,9 @@ public:
 	*/
 	UFUNCTION( BlueprintCallable, Category = "Ragdoll" )
 	void RagdollCharacter( bool newRagdoll );
+	
+	/** Updates the ragdoll sync data on the server. */
+	void UpdateRagdollSyncData();
 
 	/** Returns Mesh3P subobject **/
 	UFUNCTION( BlueprintPure, Category = "Mesh" )
@@ -259,15 +276,20 @@ public:
 	/** Sets if this pawn is possessed and locally playable */
 	void SetLocallyPossessed( bool inPossessed );
 
+	/**Is this player possessed yet */
+	UFUNCTION( BlueprintPure, Category = "Character" )
+	FORCEINLINE bool IsPossessed() const{ return mIsPossessed; }
+
+	/** Gets the bone used for ragdole based movement */
+	FName GetRagdollPhysicsBoneName() { return mRagdollMeshPhysicsBoneName; }
+	
+protected:
 	/** Event called when a locally controlled pawn gets possessed/unpossessed */
 	UFUNCTION( BlueprintImplementableEvent, BlueprintCosmetic, Category = "Character" )
 	void OnLocallyPossessedChanged( bool isLocallyPossessed );
 
-	/**Is this player possessed yet */
-	UFUNCTION( BlueprintPure, Category = "Character" )
-	FORCEINLINE bool IsPossessed() const{ return mIsPossessed; }
+	virtual void Native_OnLocallyPossessedChanged( bool isPossessed );
 	
-protected:
 	/**
 	 * Get the audio event for the foot down
 	 * 
@@ -357,6 +379,9 @@ private:
 	void OnRep_IsRagdolled();
 	
 	FVector FindSafePlaceToGetUp();
+public:
+	UPROPERTY( BlueprintAssignable )
+	FOnRagdollStateChangedDelegate mOnRagdollStateChanged;
 
 protected:
 	/** When receiving FootDown on index 2, then we will trace from mFeetNames[2] socket for ground */
@@ -411,6 +436,9 @@ protected:
 	UPROPERTY( VisibleAnywhere, BlueprintReadOnly )
 	class UFGDotReceiverComponent* mDOTReceiverComponent;
 
+	UPROPERTY( Replicated )
+	bool mIsInGas = false;
+	
 	/** How much damage to take falling with a given velocity */
 	UPROPERTY( EditDefaultsOnly, Category = "Damage" )
 	UCurveFloat* mFallDamageCurve;
@@ -422,6 +450,10 @@ protected:
 	/** @todo: This should not be specified for each pawn */
 	UPROPERTY( EditDefaultsOnly, Category = "Damage" )
 	TSubclassOf< class UFGDamageType > mFallDamageDamageType;
+
+	/** How much of the damage do we take when a vehicle runs this character over? (1 = normal, >1 = more) */
+	UPROPERTY( EditDefaultsOnly, Category = "Damage" )
+	float mVehicleDamageMultiplier;
 
 	/** Handle, for removing the character from the game after it has died */
 	FTimerHandle mDeathRemovalHandle;
@@ -483,6 +515,9 @@ protected:
 
 	UPROPERTY( Replicated )
 	FVector mRagdollMeshVelocity;
+
+	UPROPERTY( Replicated )
+	FVector mRagdollMeshAngularVelocity;
 	
 	/** Name of the bone we take mesh location from */
 	UPROPERTY( EditDefaultsOnly, Category = "Ragdoll" )
@@ -491,13 +526,6 @@ protected:
 	/** Name of the bone we take physics velocity from */
 	UPROPERTY( EditDefaultsOnly, Category = "Ragdoll" )
 	FName mRagdollMeshPhysicsBoneName;
-
-	/**
-	* The maximum sync error distance between the current body location
-	* and the synced location before we teleport the ragdoll
-	*/
-	UPROPERTY( EditDefaultsOnly, Category = "Ragdoll" )
-	float mSyncBodyMaxDistance;
 
 	/** Stores the default mesh relative transform for ragdolling purposes */
 	FTransform mDefaultMeshRelativeTransform;
@@ -528,6 +556,10 @@ protected:
 	UPROPERTY( EditDefaultsOnly, Category = "Damage" )
 	float mNormalDamageMultiplier;
 private:
+	/** Clearance data of this character. */
+	UPROPERTY( EditDefaultsOnly, Category = "Character" )
+	TArray< FFGClearanceData > mClearanceData;
+	
 	/** Used to keep track if we are locally possessed */
 	bool mIsLocallyPossessed;
 

@@ -4,6 +4,7 @@
 
 #if WITH_EDITOR
 void AFGMinimapCaptureActor::ExportHeightData(){ }
+void AFGMinimapCaptureActor::TestTrace(){ }
 void AFGMinimapCaptureActor::CalculateHeightData(FVector upperLeftWorld, const FVector xStepVect, const FVector yStepVect, const TArray< AActor* >& ignoreActors, FFGHeightData& out_terrainHeightData, FFGHeightData& out_waterHeightData, FFGHeightData& out_foliageHeightData){ }
 EHeightDataType AFGMinimapCaptureActor::GetTypeFromHitResult(const FHitResult& hitResult){ return EHeightDataType(); }
 void AFGMinimapCaptureActor::SetNotHitLocationsToLowestValue(FFGHeightData& out_heightData){ }
@@ -18,4 +19,4 @@ TArray<TArray<FColor>> AFGMinimapCaptureActor::CreateLayeredPixelArray(FFGHeight
 AFGMinimapCaptureActor::AFGMinimapCaptureActor() : Super() {
 	this->mMapAreaTexture = nullptr;
 }
-void AFGMinimapCaptureActor::BeginPlay(){ }
+void AFGMinimapCaptureActor::BeginPlay(){ Super::BeginPlay(); }

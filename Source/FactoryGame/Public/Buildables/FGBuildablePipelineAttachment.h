@@ -4,7 +4,7 @@
 
 #include "FactoryGame.h"
 #include "CoreMinimal.h"
-#include "Buildables/FGBuildableFactory.h"
+#include "FGBuildableFactory.h"
 #include "FGFluidIntegrantInterface.h"
 #include "FGBuildablePipelineAttachment.generated.h"
 
@@ -26,6 +26,10 @@ public:
 	// Begin IFGDismantleInterface
 	virtual void Dismantle_Implementation() override;
 	// End IFGDismantleInferface
+
+	// Begin AFGBuildable interface
+	virtual bool ShouldShowCenterGuidelinesForHologram( const AFGHologram* hologram ) const override;
+	// End AFGBuildable interface
 
 	// Begin Fluid Integrant Interface
 	virtual FFluidBox* GetFluidBox() override;

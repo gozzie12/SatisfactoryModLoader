@@ -3,9 +3,11 @@
 #include "Buildables/FGBuildableRailroadSignal.h"
 #include "Components/SceneComponent.h"
 #include "FGColoredInstanceMeshProxy.h"
+#include "Net/UnrealNetwork.h"
 
 AFGBuildableRailroadSignal::AFGBuildableRailroadSignal() : Super() {
 	this->mSignalComponent = CreateDefaultSubobject<UFGColoredInstanceMeshProxy>(TEXT("Signal Component"));
+	this->mDrawDebugVisualState = false;
 	this->mOwningConnection = nullptr;
 	this->mAspect = ERailroadSignalAspect::RSA_None;
 	this->mBlockValidation = ERailroadBlockValidation::RBV_Unvalidated;
@@ -20,10 +22,11 @@ void AFGBuildableRailroadSignal::GetLifetimeReplicatedProps(TArray< FLifetimePro
 	DOREPLIFETIME(AFGBuildableRailroadSignal, mBlockValidation);
 	DOREPLIFETIME(AFGBuildableRailroadSignal, mVisualState);
 }
-void AFGBuildableRailroadSignal::BeginPlay(){ }
-void AFGBuildableRailroadSignal::EndPlay(const EEndPlayReason::Type endPlayReason){ }
-void AFGBuildableRailroadSignal::Destroyed(){ }
+void AFGBuildableRailroadSignal::BeginPlay(){ Super::BeginPlay(); }
+void AFGBuildableRailroadSignal::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
+void AFGBuildableRailroadSignal::Destroyed(){ Super::Destroyed(); }
 void AFGBuildableRailroadSignal::OnBuildEffectFinished(){ }
+void AFGBuildableRailroadSignal::OnBuildEffectActorFinished(){ }
 void AFGBuildableRailroadSignal::PostLoadGame_Implementation(int32 saveVersion, int32 gameVersion){ }
 void AFGBuildableRailroadSignal::GainedSignificance_Implementation(){ }
 void AFGBuildableRailroadSignal::LostSignificance_Implementation(){ }
